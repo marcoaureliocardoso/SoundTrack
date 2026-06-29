@@ -28,6 +28,7 @@ O princípio central é **continuidade primeiro**: durante o evento, o aplicativ
 - Manter a música atual quando a próxima faixa não puder ser preparada.
 - Permitir alternar livremente para outros aplicativos sem encerrar o Modo Evento ou interromper voluntariamente o áudio.
 - Exportar a configuração de um evento como arquivo JSON legível e versionado.
+- Importar um evento exportado e orientar a nova seleção dos áudios indisponíveis no dispositivo.
 
 ## 3. Fora do escopo inicial
 
@@ -39,7 +40,6 @@ O princípio central é **continuidade primeiro**: durante o evento, o aplicativ
 - Gravação de narração ou áudio do evento.
 - Edição destrutiva dos arquivos de música.
 - Automação da linha do tempo por horário ou duração.
-- Importação de eventos exportados.
 - Exportação em XML ou formatos adicionais.
 
 A normalização permanece como evolução futura. O MVP oferece ajuste manual de ganho por momento.
@@ -51,6 +51,7 @@ A normalização permanece como evolução futura. O MVP oferece ajuste manual d
 Tela inicial com ações para:
 
 - criar evento;
+- importar evento;
 - abrir evento;
 - duplicar evento;
 - renomear evento;
@@ -136,9 +137,28 @@ O arquivo contém:
 - metadados exibidos das músicas;
 - referências locais do Android, explicitamente marcadas como dependentes do dispositivo.
 
-O arquivo não contém os bytes das músicas e não é um pacote portátil de áudio. Uma referência pode deixar de funcionar após mover o arquivo, revogar a permissão, reinstalar o app ou usar outro dispositivo. A exportação serve para inspeção, integração futura e preservação da configuração; a importação e o religamento assistido das músicas ficam fora do MVP.
+O arquivo não contém os bytes das músicas e não é um pacote portátil de áudio. Uma referência pode deixar de funcionar após mover o arquivo, revogar a permissão, reinstalar o app ou usar outro dispositivo. A exportação preserva a configuração, enquanto a importação trata referências indisponíveis como áudios pendentes.
 
 O esquema usa JSON por ser simples, amplamente suportado e fácil de versionar. XML e formatos adicionais não serão oferecidos no primeiro lançamento.
+
+### 4.7 Importação e religamento dos áudios
+
+Em Meus Eventos, o usuário pode selecionar um arquivo `.soundtrack.json`. O app valida formato e versão antes de criar qualquer dado local.
+
+Quando o arquivo é aceito:
+
+- um novo identificador local é gerado, evitando colisão com eventos existentes;
+- nome, ordem, configurações globais e configurações dos momentos são preservados;
+- cada referência de áudio é testada no dispositivo atual;
+- referências válidas e acessíveis podem ser reutilizadas;
+- referências ausentes ou inacessíveis ficam com estado **Áudio pendente**;
+- nenhum momento pendente é associado automaticamente a outro arquivo com nome parecido.
+
+Uma tela de religamento lista os momentos pendentes com nome do momento, arquivo original, artista e duração, quando disponíveis. Para cada item, o usuário escolhe uma nova música local ou deixa a pendência para resolver depois. A mesma música pode ser escolhida para mais de um momento.
+
+Ao selecionar uma nova música, o app substitui a referência local daquele momento, preserva as demais configurações e executa um teste de preparação. O evento importado permanece editável e pode ser salvo com pendências, mas a Verificação pré-evento destaca todos os áudios ainda não resolvidos.
+
+Arquivos com JSON inválido, formato desconhecido ou versão mais nova que a suportada são rejeitados sem criar um evento parcial. Versões antigas reconhecidas são migradas em memória e validadas antes da gravação.
 
 ## 5. Modelo de dados
 
@@ -209,6 +229,8 @@ Envelope textual do arquivo exportado:
 - `audioSources`: referências locais e metadados, cada uma marcada com `portable: false`.
 
 Campos futuros devem ser opcionais ou acompanhados por incremento de `schemaVersion`. Dados transitórios de `SessionState` não são exportados.
+
+Na importação, `audioSources` fornece contexto para o religamento, mas não é considerado prova de que o áudio exista. Uma referência somente deixa o estado pendente depois que o acesso e a preparação da faixa forem validados no dispositivo atual.
 
 ## 6. Regras de áudio
 
@@ -309,7 +331,9 @@ A interface envia intenções e renderiza um estado imutável. Ela não controla
 - adaptação dos dois players;
 - observação de foco e rota de áudio;
 - integração para tela ativa e execução em primeiro plano.
-- serialização versionada e compartilhamento do arquivo JSON exportado.
+- serialização, desserialização e migração do esquema JSON versionado;
+- compartilhamento do arquivo exportado e seleção do arquivo a importar;
+- fluxo de religamento entre metadados importados e novas referências persistentes do Android.
 
 As interfaces entre essas unidades permitem substituir armazenamento ou biblioteca de áudio sem alterar as regras do produto.
 
@@ -324,6 +348,10 @@ As interfaces entre essas unidades permitem substituir armazenamento ou bibliote
 - Interrupção imposta pelo Android: preservar posição e retomar automaticamente.
 - App enviado ao segundo plano: manter serviço, reprodução e estado; restaurar o mesmo Dashboard ao retornar.
 - Falha ao criar ou compartilhar exportação: não alterar o evento e informar o destino ou a permissão que falhou.
+- JSON importado inválido ou incompatível: rejeitar antes da gravação e explicar formato ou versão.
+- Falha durante importação: não criar evento parcial.
+- Áudio importado inacessível: marcar o momento como pendente sem descartar suas configurações.
+- Nova música escolhida não pode ser preparada: manter a pendência e permitir outra escolha.
 - Estado persistente corrompido: isolar o evento afetado e manter os demais acessíveis.
 - Encerramento inesperado: salvar alterações do editor de forma atômica; a sessão ao vivo não promete retomar áudio após o processo ser morto.
 
@@ -370,7 +398,7 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - reprodução e transições com o app em segundo plano;
 - encerramento e recriação da interface sem reiniciar a sessão mantida pelo serviço.
 
-### Exportação
+### Exportação e importação
 
 - JSON válido em UTF-8;
 - esquema e versão presentes;
@@ -379,6 +407,13 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - ausência dos bytes das músicas;
 - falha de escrita ou compartilhamento sem modificar o evento;
 - compatibilidade de leitura estrutural por ferramentas JSON comuns.
+- importação com novo identificador local;
+- rejeição atômica de JSON inválido ou versão incompatível;
+- migração de versões antigas suportadas;
+- reutilização apenas de referências realmente acessíveis;
+- marcação dos demais áudios como pendentes;
+- religamento manual sem perder configurações do momento;
+- teste da nova faixa antes de remover a pendência.
 
 ### Validação física
 
@@ -402,4 +437,5 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - Interrupções externas não provocam pausa voluntária e a retomada automática ocorre quando o Android a torna necessária.
 - Alternar para outro aplicativo não interrompe voluntariamente o áudio, e retornar preserva o estado do Dashboard.
 - Um evento pode ser exportado como JSON versionado sem incorporar os arquivos de música.
+- Um evento exportado pode ser importado; áudios indisponíveis ficam pendentes e podem ser religados manualmente no novo dispositivo.
 - Uma sessão prolongada em aparelho físico não apresenta vazamentos progressivos, perda de comandos ou degradação das transições.
