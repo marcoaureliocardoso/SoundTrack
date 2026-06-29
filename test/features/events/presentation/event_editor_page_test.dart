@@ -19,6 +19,16 @@ void main() {
       MaterialApp(home: EventEditorPage(controller: controller)),
     );
 
+    final unavailableModeButton = find.widgetWithText(
+      FilledButton,
+      'Disponível após instalar o motor de áudio',
+    );
+    expect(unavailableModeButton, findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(unavailableModeButton).onPressed,
+      isNull,
+    );
+
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');

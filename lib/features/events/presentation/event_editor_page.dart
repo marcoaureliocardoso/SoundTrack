@@ -89,11 +89,10 @@ class _EventEditorPageState extends State<EventEditorPage> {
                     child: FilledButton.icon(
                       onPressed: null,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Modo Evento'),
+                      label: const Text(
+                        'Disponível após instalar o motor de áudio',
+                      ),
                     ),
-                  ),
-                  const Center(
-                    child: Text('Disponível após instalar o motor de áudio'),
                   ),
                   const SizedBox(height: 16),
                   Text(
