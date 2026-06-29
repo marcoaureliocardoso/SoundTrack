@@ -56,7 +56,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
             );
           }
           return RefreshIndicator(
-            onRefresh: widget.controller.load,
+            onRefresh: _refresh,
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
               itemCount: widget.controller.events.length,
@@ -116,6 +116,15 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       return;
     }
     await _run(() => widget.controller.create(name));
+  }
+
+  Future<void> _refresh() async {
+    await widget.controller.load();
+    if (mounted && widget.controller.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar os eventos')),
+      );
+    }
   }
 
   Future<void> _open(SoundTrackEvent event) async {

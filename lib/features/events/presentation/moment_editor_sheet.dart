@@ -24,6 +24,8 @@ class MomentEditorSheet extends StatefulWidget {
 class _MomentEditorSheetState extends State<MomentEditorSheet> {
   late final TextEditingController _nameController;
   late EventMoment _draft;
+  bool _selectingAudio = false;
+  String? _audioError;
 
   @override
   void initState() {
@@ -121,10 +123,22 @@ class _MomentEditorSheetState extends State<MomentEditorSheet> {
               },
             ),
             OutlinedButton.icon(
-              onPressed: widget.onSelectAudio == null ? null : _selectAudio,
-              icon: const Icon(Icons.audio_file),
+              onPressed: widget.onSelectAudio == null || _selectingAudio
+                  ? null
+                  : _selectAudio,
+              icon: _selectingAudio
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.audio_file),
               label: Text(_draft.audio?.displayName ?? 'Selecionar áudio'),
             ),
+            if (_audioError != null)
+              Text(
+                _audioError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: _nameController.text.trim().isEmpty
@@ -144,11 +158,26 @@ class _MomentEditorSheetState extends State<MomentEditorSheet> {
   }
 
   Future<void> _selectAudio() async {
-    final audio = await widget.onSelectAudio?.call();
-    if (!mounted || audio == null) {
-      return;
+    setState(() {
+      _selectingAudio = true;
+      _audioError = null;
+    });
+    try {
+      final audio = await widget.onSelectAudio?.call();
+      if (mounted && audio != null) {
+        setState(() => _draft = _draft.copyWith(audio: audio));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _audioError = 'Não foi possível selecionar o áudio';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _selectingAudio = false);
+      }
     }
-    setState(() => _draft = _draft.copyWith(audio: audio));
   }
 }
 
