@@ -5,7 +5,7 @@ class AudioReference {
     required this.pending,
     required this.artist,
     required this.duration,
-  });
+  }) : assert(pending || (uri != null && uri != ''));
 
   final String? uri;
   final String displayName;
@@ -23,7 +23,7 @@ class AudioReference {
     return AudioReference(
       uri: uri,
       displayName: json['displayName'] as String,
-      pending: imported || uri == null,
+      pending: imported || uri == null || uri.isEmpty,
       artist: json['artist'] as String?,
       duration: durationMs == null ? null : Duration(milliseconds: durationMs),
     );
@@ -45,6 +45,10 @@ class AudioReference {
     String? artist,
     Duration? duration,
   }) {
+    if (uri.isEmpty) {
+      throw ArgumentError.value(uri, 'uri', 'must not be empty');
+    }
+
     return AudioReference(
       uri: uri,
       displayName: displayName,

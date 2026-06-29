@@ -5,7 +5,9 @@ class EventAudioSettings {
     required this.narrationVolume,
     required this.fadeIn,
     required this.fadeOut,
-  });
+  }) : assert(masterVolume >= 0.0 && masterVolume <= 1.0),
+       assert(musicVolume >= 0.0 && musicVolume <= 1.0),
+       assert(narrationVolume >= 0.0 && narrationVolume <= 1.0);
 
   const EventAudioSettings.defaults()
     : masterVolume = 0.80,
@@ -22,9 +24,12 @@ class EventAudioSettings {
 
   factory EventAudioSettings.fromJson(Map<String, Object?> json) {
     return EventAudioSettings(
-      masterVolume: (json['masterVolume'] as num).toDouble(),
-      musicVolume: (json['musicVolume'] as num).toDouble(),
-      narrationVolume: (json['narrationVolume'] as num).toDouble(),
+      masterVolume: (json['masterVolume'] as num).toDouble().clamp(0.0, 1.0),
+      musicVolume: (json['musicVolume'] as num).toDouble().clamp(0.0, 1.0),
+      narrationVolume: (json['narrationVolume'] as num).toDouble().clamp(
+        0.0,
+        1.0,
+      ),
       fadeIn: Duration(milliseconds: json['fadeInMs'] as int),
       fadeOut: Duration(milliseconds: json['fadeOutMs'] as int),
     );
