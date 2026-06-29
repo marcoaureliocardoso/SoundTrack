@@ -51,10 +51,7 @@ void main() {
     ]);
 
     final secondMoment = find.byKey(momentTileKey('moment-2'));
-    await tester.drag(
-      find.byType(ReorderableListView),
-      const Offset(0, -120),
-    );
+    await tester.drag(find.byType(ReorderableListView), const Offset(0, -120));
     await tester.pumpAndSettle();
     await tester.drag(secondMoment, const Offset(0, -200));
     await tester.pumpAndSettle();
@@ -137,6 +134,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EventEditorPage), findsNothing);
     expect(find.text('Abrir editor'), findsOneWidget);
+  });
+
+  testWidgets('saves an incomplete draft with a moment without audio', (
+    tester,
+  ) async {
+    final repository = InMemoryEventRepository();
+    final controller = EventEditorController(
+      repository: repository,
+      initial: SoundTrackEvent.create(id: 'event-1', name: 'Formatura'),
+      newId: () => 'moment-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+    await tester.tap(find.byKey(addMomentKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
+    await tester.tap(find.text('Adicionar'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.save));
+    await tester.pumpAndSettle();
+
+    final persisted = await repository.findById('event-1');
+    expect(persisted?.moments.single.name, 'Entrada');
+    expect(persisted?.moments.single.audio, isNull);
+    expect(controller.dirty, isFalse);
+    expect(find.text('Evento salvo'), findsOneWidget);
+  });
+
+  testWidgets('blocks saving an event with an empty name', (tester) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: _validEvent(),
+      newId: () => 'moment-2',
+    )..rename('');
+
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+
+    expect(find.text('Informe o nome do evento.'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save))
+          .onPressed,
+      isNull,
+    );
   });
 }
 

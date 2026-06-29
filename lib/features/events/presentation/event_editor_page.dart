@@ -49,8 +49,9 @@ class _EventEditorPageState extends State<EventEditorPage> {
       listenable: widget.controller,
       builder: (context, _) {
         final event = widget.controller.draft;
-        final issues = widget.controller.issues;
-        final validationMessage = issues.isEmpty ? null : issues.first.message;
+        final saveBlockMessage = event.name.trim().isEmpty
+            ? 'Informe o nome do evento.'
+            : null;
         return PopScope<void>(
           canPop: _allowPop || !widget.controller.dirty,
           onPopInvokedWithResult: (didPop, _) {
@@ -63,11 +64,11 @@ class _EventEditorPageState extends State<EventEditorPage> {
               title: const Text('Editar evento'),
               actions: [
                 IconButton(
-                  tooltip: validationMessage ?? 'Salvar',
+                  tooltip: saveBlockMessage ?? 'Salvar',
                   onPressed:
                       _saving ||
                           !widget.controller.dirty ||
-                          validationMessage != null
+                          saveBlockMessage != null
                       ? null
                       : _save,
                   icon: _saving
@@ -81,7 +82,7 @@ class _EventEditorPageState extends State<EventEditorPage> {
             ),
             body: AbsorbPointer(
               absorbing: _saving,
-              child: _buildEditor(event, validationMessage),
+              child: _buildEditor(event, saveBlockMessage),
             ),
             floatingActionButton: FloatingActionButton.extended(
               key: addMomentKey,
