@@ -201,6 +201,56 @@ void main() {
       expect(controller.dirty, isTrue);
     });
 
+    test('simultaneous saves persist snapshots in invocation order', () async {
+      final repository = _SequencedEditorSaveRepository();
+      final controller = EventEditorController(
+        repository: repository,
+        initial: SoundTrackEvent.create(id: 'e1', name: 'Evento'),
+        newId: () => 'moment',
+      );
+      controller.rename('Primeira edição');
+      final firstSave = controller.save();
+      await repository.started[0].future;
+
+      controller.rename('Segunda edição');
+      final secondSave = controller.save();
+
+      expect(repository.saveCalls, 1);
+      repository.gates[1].complete();
+      repository.gates[0].complete();
+      await firstSave;
+      await repository.started[1].future;
+      await secondSave;
+
+      expect((await repository.findById('e1'))!.name, 'Segunda edição');
+      expect(controller.dirty, isFalse);
+    });
+
+    test('save queue continues after an earlier save fails', () async {
+      final error = StateError('first save failed');
+      final repository = _SequencedEditorSaveRepository();
+      final controller = EventEditorController(
+        repository: repository,
+        initial: SoundTrackEvent.create(id: 'e1', name: 'Evento'),
+        newId: () => 'moment',
+      );
+      controller.rename('Primeira edição');
+      final firstSave = controller.save();
+      await repository.started[0].future;
+      controller.rename('Segunda edição');
+      final secondSave = controller.save();
+
+      expect(repository.saveCalls, 1);
+      repository.gates[0].completeError(error);
+      await expectLater(firstSave, throwsA(same(error)));
+      await repository.started[1].future;
+      repository.gates[1].complete();
+      await secondSave;
+
+      expect((await repository.findById('e1'))!.name, 'Segunda edição');
+      expect(controller.dirty, isFalse);
+    });
+
     test('issues cannot be mutated externally', () {
       final controller = EventEditorController(
         repository: InMemoryEventRepository(),
@@ -232,6 +282,20 @@ class _GatedSaveRepository extends InMemoryEventRepository {
   Future<void> save(SoundTrackEvent event) async {
     saveStarted.complete(event);
     await saveGate.future;
+    await super.save(event);
+  }
+}
+
+class _SequencedEditorSaveRepository extends InMemoryEventRepository {
+  final started = [Completer<void>(), Completer<void>()];
+  final gates = [Completer<void>(), Completer<void>()];
+  int saveCalls = 0;
+
+  @override
+  Future<void> save(SoundTrackEvent event) async {
+    final index = saveCalls++;
+    started[index].complete();
+    await gates[index].future;
     await super.save(event);
   }
 }

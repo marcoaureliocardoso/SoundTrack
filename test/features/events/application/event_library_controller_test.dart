@@ -222,6 +222,72 @@ void main() {
 
       expect(controller.events, isEmpty);
     });
+
+    test(
+      'rename preserves repository changes newer than visible cache',
+      () async {
+        final original = SoundTrackEvent.create(id: 'event', name: 'Original')
+            .addMoment(
+              EventMoment.create(id: 'first', position: 0, name: 'Primeiro'),
+            );
+        final repository = InMemoryEventRepository([original]);
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'unused',
+        );
+        await controller.load();
+        final externallyUpdated = original.copyWith(
+          audioSettings: original.audioSettings.copyWith(masterVolume: 0.35),
+          moments: [
+            ...original.moments,
+            EventMoment.create(id: 'second', position: 1, name: 'Segundo'),
+          ],
+        );
+        await repository.save(externallyUpdated);
+
+        await controller.rename('event', 'Renomeado');
+
+        final persisted = await repository.findById('event');
+        expect(persisted!.name, 'Renomeado');
+        expect(persisted.audioSettings.masterVolume, 0.35);
+        expect(persisted.moments.map((moment) => moment.id), [
+          'first',
+          'second',
+        ]);
+      },
+    );
+
+    test(
+      'duplicate copies repository changes newer than visible cache',
+      () async {
+        final original = SoundTrackEvent.create(id: 'event', name: 'Original')
+            .addMoment(
+              EventMoment.create(id: 'first', position: 0, name: 'Primeiro'),
+            );
+        final repository = InMemoryEventRepository([original]);
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'copy',
+        );
+        await controller.load();
+        final externallyUpdated = original.copyWith(
+          audioSettings: original.audioSettings.copyWith(masterVolume: 0.35),
+          moments: [
+            ...original.moments,
+            EventMoment.create(id: 'second', position: 1, name: 'Segundo'),
+          ],
+        );
+        await repository.save(externallyUpdated);
+
+        final duplicate = await controller.duplicate('event');
+
+        expect(duplicate.audioSettings.masterVolume, 0.35);
+        expect(duplicate.moments.map((moment) => moment.id), [
+          'first',
+          'second',
+        ]);
+      },
+    );
   });
 }
 

@@ -59,7 +59,7 @@ class EventLibraryController extends ChangeNotifier {
 
   Future<SoundTrackEvent> duplicate(String id) {
     return _mutate(() async {
-      final original = _findVisible(id) ?? await _repository.findById(id);
+      final original = await _repository.findById(id);
       if (original == null) {
         throw StateError('Event $id does not exist.');
       }
@@ -82,7 +82,7 @@ class EventLibraryController extends ChangeNotifier {
 
   Future<void> rename(String id, String name) {
     return _mutate(() async {
-      final event = _findVisible(id) ?? await _repository.findById(id);
+      final event = await _repository.findById(id);
       if (event == null) {
         throw StateError('Event $id does not exist.');
       }
@@ -147,15 +147,6 @@ class EventLibraryController extends ChangeNotifier {
     });
 
     return result.future;
-  }
-
-  SoundTrackEvent? _findVisible(String id) {
-    for (final event in _events) {
-      if (event.id == id) {
-        return event;
-      }
-    }
-    return null;
   }
 
   void _upsert(SoundTrackEvent event) {

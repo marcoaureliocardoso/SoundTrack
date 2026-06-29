@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/event_repository.dart';
@@ -35,6 +37,7 @@ class EventEditorController extends ChangeNotifier {
   List<EventIssue> _issues;
   int _revision = 0;
   bool _disposed = false;
+  Future<void> _saveQueue = Future.value();
 
   SoundTrackEvent get draft => _draft;
   bool get dirty => _dirty;
@@ -79,15 +82,25 @@ class EventEditorController extends ChangeNotifier {
     _replaceDraft(_draft.reorderMoment(oldIndex: oldIndex, newIndex: newIndex));
   }
 
-  Future<void> save() async {
+  Future<void> save() {
     final snapshot = _draft;
     final savedRevision = _revision;
-    await _repository.save(snapshot);
-    if (_disposed || savedRevision != _revision || !_dirty) {
-      return;
-    }
-    _dirty = false;
-    notifyListeners();
+    final result = Completer<void>();
+
+    _saveQueue = _saveQueue.then((_) async {
+      try {
+        await _repository.save(snapshot);
+        if (!_disposed && savedRevision == _revision && _dirty) {
+          _dirty = false;
+          notifyListeners();
+        }
+        result.complete();
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+
+    return result.future;
   }
 
   void _replaceDraft(SoundTrackEvent draft) {
