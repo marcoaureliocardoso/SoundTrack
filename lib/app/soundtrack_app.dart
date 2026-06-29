@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/events/application/event_library_controller.dart';
+import '../features/events/application/event_transfer_controller.dart';
 import '../features/events/presentation/event_library_page.dart';
 import 'app_dependencies.dart';
 
@@ -15,11 +16,13 @@ class SoundTrackApp extends StatefulWidget {
 
 class _SoundTrackAppState extends State<SoundTrackApp> {
   late final EventLibraryController _libraryController;
+  late final EventTransferController _transferController;
 
   @override
   void initState() {
     super.initState();
     _libraryController = widget.dependencies.createLibraryController();
+    _transferController = widget.dependencies.createTransferController();
   }
 
   @override
@@ -43,6 +46,10 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
       home: EventLibraryPage(
         controller: _libraryController,
         createEditorController: widget.dependencies.createEditorController,
+        onExport: _transferController.exportEvent,
+        onImport: _transferController.importEvent,
+        transferController: _transferController,
+        onSelectAudio: _transferController.selectAudio,
       ),
     );
   }

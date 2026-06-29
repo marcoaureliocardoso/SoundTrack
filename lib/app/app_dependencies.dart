@@ -5,20 +5,30 @@ import 'package:uuid/uuid.dart';
 
 import '../features/events/application/event_editor_controller.dart';
 import '../features/events/application/event_library_controller.dart';
+import '../features/events/application/event_transfer_controller.dart';
+import '../features/events/data/event_export_codec.dart';
 import '../features/events/data/event_repository.dart';
 import '../features/events/data/json_file_event_repository.dart';
 import '../features/events/domain/soundtrack_event.dart';
+import '../platform/documents/document_gateway.dart';
+import '../platform/documents/method_channel_document_gateway.dart';
 
 class AppDependencies {
   const AppDependencies({
     required this.eventRepository,
     required this.newEventId,
     required this.newMomentId,
+    this.documentGateway = const MethodChannelDocumentGateway(),
+    this.exportCodec = const EventExportCodec(),
+    this.clock = DateTime.now,
   });
 
   final EventRepository eventRepository;
   final String Function() newEventId;
   final String Function() newMomentId;
+  final DocumentGateway documentGateway;
+  final EventExportCodec exportCodec;
+  final DateTime Function() clock;
 
   static Future<AppDependencies> create() async {
     final documents = await getApplicationDocumentsDirectory();
@@ -45,6 +55,16 @@ class AppDependencies {
       repository: eventRepository,
       initial: event,
       newId: newMomentId,
+    );
+  }
+
+  EventTransferController createTransferController() {
+    return EventTransferController(
+      gateway: documentGateway,
+      codec: exportCodec,
+      repository: eventRepository,
+      newId: newEventId,
+      clock: clock,
     );
   }
 }

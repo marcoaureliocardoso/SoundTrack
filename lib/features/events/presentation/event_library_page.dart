@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../application/event_editor_controller.dart';
 import '../application/event_library_controller.dart';
+import '../application/event_transfer_controller.dart';
+import '../domain/audio_reference.dart';
 import '../domain/soundtrack_event.dart';
+import 'audio_relink_page.dart';
 import 'event_editor_page.dart';
 import 'widgets/event_card.dart';
 
@@ -11,19 +14,26 @@ const eventNameFieldKey = Key('event-name-field');
 
 typedef EventEditorControllerFactory =
     EventEditorController Function(SoundTrackEvent event);
-typedef EventExportCallback = Future<void> Function(SoundTrackEvent event);
+typedef EventExportCallback = Future<bool> Function(SoundTrackEvent event);
+typedef EventImportCallback = Future<SoundTrackEvent?> Function();
 
 class EventLibraryPage extends StatefulWidget {
   const EventLibraryPage({
     required this.controller,
     required this.createEditorController,
     this.onExport,
+    this.onImport,
+    this.transferController,
+    this.onSelectAudio,
     super.key,
   });
 
   final EventLibraryController controller;
   final EventEditorControllerFactory createEditorController;
   final EventExportCallback? onExport;
+  final EventImportCallback? onImport;
+  final EventTransferController? transferController;
+  final Future<AudioReference?> Function()? onSelectAudio;
 
   @override
   State<EventLibraryPage> createState() => _EventLibraryPageState();
@@ -39,7 +49,17 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Meus Eventos')),
+      appBar: AppBar(
+        title: const Text('Meus Eventos'),
+        actions: [
+          if (widget.onImport != null)
+            TextButton.icon(
+              onPressed: _import,
+              icon: const Icon(Icons.file_open),
+              label: const Text('Importar'),
+            ),
+        ],
+      ),
       body: ListenableBuilder(
         listenable: widget.controller,
         builder: (context, _) {
@@ -103,7 +123,14 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       case EventCardAction.export:
         final export = widget.onExport;
         if (export != null) {
-          await _run(() => export(event));
+          try {
+            final exported = await export(event);
+            if (mounted) {
+              _message(exported ? 'Evento exportado' : 'Exportação cancelada');
+            }
+          } catch (_) {
+            if (mounted) _message('Não foi possível exportar o evento');
+          }
         }
       case EventCardAction.delete:
         await _confirmDelete(event);
@@ -131,13 +158,52 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     final editorController = widget.createEditorController(event);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (context) => EventEditorPage(controller: editorController),
+        builder: (context) => EventEditorPage(
+          controller: editorController,
+          onSelectAudio: widget.onSelectAudio,
+        ),
       ),
     );
     editorController.dispose();
     if (mounted) {
       await widget.controller.load();
     }
+  }
+
+  Future<void> _import() async {
+    try {
+      final imported = await widget.onImport?.call();
+      if (!mounted) return;
+      if (imported == null) {
+        _message('Importação cancelada');
+        return;
+      }
+      await widget.controller.load();
+      if (!mounted) return;
+      final hasPending = imported.moments.any(
+        (moment) => moment.audio?.pending ?? false,
+      );
+      if (hasPending && widget.transferController != null) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => AudioRelinkPage(
+              event: imported,
+              controller: widget.transferController!,
+            ),
+          ),
+        );
+        if (mounted) await widget.controller.load();
+      } else {
+        _message('Evento importado');
+        await _open(imported);
+      }
+    } catch (_) {
+      if (mounted) _message('Não foi possível importar o evento');
+    }
+  }
+
+  void _message(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<String?> _requestName({

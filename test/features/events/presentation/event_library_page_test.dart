@@ -64,4 +64,24 @@ void main() {
     expect(find.text('Formatura'), findsOneWidget);
     expect(find.text('Não foi possível atualizar os eventos'), findsOneWidget);
   });
+
+  testWidgets('offers import and reports cancellation', (tester) async {
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository(),
+      newId: () => 'event-1',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+          onImport: () async => null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Importação cancelada'), findsOneWidget);
+  });
 }
