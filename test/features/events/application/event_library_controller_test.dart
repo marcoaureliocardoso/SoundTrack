@@ -157,6 +157,71 @@ void main() {
         throwsUnsupportedError,
       );
     });
+
+    test(
+      'serializes operations, keeps loading, and continues after an error',
+      () async {
+        final error = StateError('first failed');
+        final repository = _SequencedSaveRepository();
+        var nextId = 0;
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'event-${++nextId}',
+        );
+
+        final first = controller.create('Primeiro');
+        final second = controller.create('Segundo');
+        await repository.firstSaveStarted.future;
+
+        expect(repository.saveCalls, 1);
+        expect(controller.loading, isTrue);
+
+        repository.firstSaveGate.completeError(error);
+        await expectLater(first, throwsA(same(error)));
+        await repository.secondSaveStarted.future;
+
+        expect(controller.loading, isTrue);
+        repository.secondSaveGate.complete();
+        final secondEvent = await second;
+
+        expect(secondEvent.name, 'Segundo');
+        expect(controller.events.map((event) => event.name), ['Segundo']);
+        expect(controller.error, isNull);
+        expect(controller.loading, isFalse);
+      },
+    );
+
+    test('successful write does not depend on a subsequent refresh', () async {
+      final repository = InMemoryEventRepository();
+      final controller = EventLibraryController(
+        repository: repository,
+        newId: () => 'event',
+      );
+      await controller.load();
+      repository.findAllError = StateError('refresh failed');
+
+      final created = await controller.create('Evento');
+
+      expect(created.id, 'event');
+      expect(controller.events, [same(created)]);
+      expect(controller.error, isNull);
+    });
+
+    test('dispose during load prevents post-await state changes', () async {
+      final completer = Completer<List<SoundTrackEvent>>();
+      final repository = _DelayedFindAllRepository(completer.future);
+      final controller = EventLibraryController(
+        repository: repository,
+        newId: () => 'new',
+      );
+
+      final load = controller.load();
+      controller.dispose();
+      completer.complete([SoundTrackEvent.create(id: 'late', name: 'Late')]);
+      await load;
+
+      expect(controller.events, isEmpty);
+    });
   });
 }
 
@@ -167,4 +232,25 @@ class _DelayedFindAllRepository extends InMemoryEventRepository {
 
   @override
   Future<List<SoundTrackEvent>> findAll() => result;
+}
+
+class _SequencedSaveRepository extends InMemoryEventRepository {
+  final firstSaveStarted = Completer<void>();
+  final secondSaveStarted = Completer<void>();
+  final firstSaveGate = Completer<void>();
+  final secondSaveGate = Completer<void>();
+  int saveCalls = 0;
+
+  @override
+  Future<void> save(SoundTrackEvent event) async {
+    saveCalls++;
+    if (saveCalls == 1) {
+      firstSaveStarted.complete();
+      await firstSaveGate.future;
+    } else {
+      secondSaveStarted.complete();
+      await secondSaveGate.future;
+    }
+    await super.save(event);
+  }
 }

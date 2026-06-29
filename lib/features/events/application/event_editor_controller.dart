@@ -33,6 +33,8 @@ class EventEditorController extends ChangeNotifier {
   SoundTrackEvent _draft;
   bool _dirty = false;
   List<EventIssue> _issues;
+  int _revision = 0;
+  bool _disposed = false;
 
   SoundTrackEvent get draft => _draft;
   bool get dirty => _dirty;
@@ -78,7 +80,12 @@ class EventEditorController extends ChangeNotifier {
   }
 
   Future<void> save() async {
-    await _repository.save(_draft);
+    final snapshot = _draft;
+    final savedRevision = _revision;
+    await _repository.save(snapshot);
+    if (_disposed || savedRevision != _revision || !_dirty) {
+      return;
+    }
     _dirty = false;
     notifyListeners();
   }
@@ -86,7 +93,14 @@ class EventEditorController extends ChangeNotifier {
   void _replaceDraft(SoundTrackEvent draft) {
     _draft = draft;
     _dirty = true;
+    _revision++;
     _issues = List.unmodifiable(validateEvent(draft));
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

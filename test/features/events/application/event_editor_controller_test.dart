@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/events/application/event_editor_controller.dart';
 import 'package:soundtrack/features/events/domain/audio_reference.dart';
@@ -140,6 +142,65 @@ void main() {
       expect(notifications, 1);
     });
 
+    test(
+      'save keeps dirty when draft changes while persistence waits',
+      () async {
+        final repository = _GatedSaveRepository();
+        final controller = EventEditorController(
+          repository: repository,
+          initial: SoundTrackEvent.create(id: 'e1', name: 'Evento'),
+          newId: () => 'moment',
+        );
+        controller.rename('Primeira edição');
+
+        final save = controller.save();
+        final savedSnapshot = await repository.saveStarted.future;
+        controller.rename('Segunda edição');
+        repository.saveGate.complete();
+        await save;
+
+        expect(savedSnapshot.name, 'Primeira edição');
+        expect(controller.draft.name, 'Segunda edição');
+        expect(controller.dirty, isTrue);
+      },
+    );
+
+    test(
+      'save of a clean draft does not notify without a state change',
+      () async {
+        final controller = EventEditorController(
+          repository: InMemoryEventRepository(),
+          initial: SoundTrackEvent.create(id: 'e1', name: 'Evento'),
+          newId: () => 'moment',
+        );
+        var notifications = 0;
+        controller.addListener(() => notifications++);
+
+        await controller.save();
+
+        expect(controller.dirty, isFalse);
+        expect(notifications, 0);
+      },
+    );
+
+    test('dispose during save prevents post-await state changes', () async {
+      final repository = _GatedSaveRepository();
+      final controller = EventEditorController(
+        repository: repository,
+        initial: SoundTrackEvent.create(id: 'e1', name: 'Evento'),
+        newId: () => 'moment',
+      );
+      controller.rename('Editado');
+
+      final save = controller.save();
+      await repository.saveStarted.future;
+      controller.dispose();
+      repository.saveGate.complete();
+      await save;
+
+      expect(controller.dirty, isTrue);
+    });
+
     test('issues cannot be mutated externally', () {
       final controller = EventEditorController(
         repository: InMemoryEventRepository(),
@@ -161,4 +222,16 @@ void main() {
       );
     });
   });
+}
+
+class _GatedSaveRepository extends InMemoryEventRepository {
+  final saveStarted = Completer<SoundTrackEvent>();
+  final saveGate = Completer<void>();
+
+  @override
+  Future<void> save(SoundTrackEvent event) async {
+    saveStarted.complete(event);
+    await saveGate.future;
+    await super.save(event);
+  }
 }
