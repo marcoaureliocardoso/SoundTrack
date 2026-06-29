@@ -2,16 +2,32 @@ import 'event_audio_settings.dart';
 import 'event_moment.dart';
 
 class SoundTrackEvent {
-  const SoundTrackEvent({
+  factory SoundTrackEvent({
+    required String id,
+    required String name,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    required EventAudioSettings settings,
+    required List<EventMoment> moments,
+  }) {
+    return SoundTrackEvent._(
+      List.unmodifiable(moments),
+      id: id,
+      name: name,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      settings: settings,
+    );
+  }
+
+  const SoundTrackEvent._(
+    this._moments, {
     required this.id,
     required this.name,
     required this.createdAt,
     required this.updatedAt,
     required this.settings,
-    required List<EventMoment> moments,
-    // The public parameter stays unprefixed while storage remains private.
-    // ignore: prefer_initializing_formals
-  }) : _moments = moments;
+  });
 
   factory SoundTrackEvent.create({required String id, required String name}) {
     final now = DateTime.now().toUtc();
@@ -39,14 +55,14 @@ class SoundTrackEvent {
       settings: EventAudioSettings.fromJson(
         Map<String, Object?>.from(json['settings'] as Map),
       ),
-      moments: List.unmodifiable(
-        momentJson.map(
-          (item) => EventMoment.fromJson(
-            Map<String, Object?>.from(item! as Map),
-            imported: imported,
-          ),
-        ),
-      ),
+      moments: momentJson
+          .map(
+            (item) => EventMoment.fromJson(
+              Map<String, Object?>.from(item! as Map),
+              imported: imported,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -119,7 +135,7 @@ class SoundTrackEvent {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       settings: settings ?? this.settings,
-      moments: List.unmodifiable(moments ?? _moments),
+      moments: moments ?? _moments,
     );
   }
 

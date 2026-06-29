@@ -107,6 +107,37 @@ void main() {
       );
     });
 
+    test('constructor isolates moments from the source list', () {
+      final source = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final moments = [
+        EventMoment.create(id: 'a', position: 0, name: 'Entrada'),
+      ];
+      final event = SoundTrackEvent(
+        id: source.id,
+        name: source.name,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt,
+        settings: source.settings,
+        moments: moments,
+      );
+
+      moments.clear();
+
+      expect(event.moments.map((moment) => moment.id), ['a']);
+    });
+
+    test('copyWith isolates moments from the replacement list', () {
+      final source = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final moments = [
+        EventMoment.create(id: 'a', position: 0, name: 'Entrada'),
+      ];
+      final event = source.copyWith(moments: moments);
+
+      moments.clear();
+
+      expect(event.moments.map((moment) => moment.id), ['a']);
+    });
+
     test('add, update, and remove maintain aggregate invariants', () {
       final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura')
           .addMoment(EventMoment.create(id: 'a', position: 9, name: 'Recepção'))
