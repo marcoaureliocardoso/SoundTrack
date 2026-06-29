@@ -49,8 +49,55 @@ void main() {
       expect(moment.copyWith(clearAudio: true).audio, isNull);
     });
 
+    test('direct construction clamps gain to the supported range', () {
+      final above = EventMoment(
+        id: 'above',
+        position: 0,
+        name: 'Above',
+        audio: null,
+        endBehavior: EndBehavior.loop,
+        narrationEnabled: false,
+        gainDb: 20,
+        fadeIn: null,
+        fadeOut: null,
+      );
+      final below = EventMoment(
+        id: 'below',
+        position: 1,
+        name: 'Below',
+        audio: null,
+        endBehavior: EndBehavior.loop,
+        narrationEnabled: false,
+        gainDb: -20,
+        fadeIn: null,
+        fadeOut: null,
+      );
+
+      expect(above.gainDb, 6);
+      expect(below.gainDb, -12);
+    });
+
+    test('copyWith preserves and clears per-moment fades independently', () {
+      final moment = EventMoment.create(id: 'a', position: 0, name: 'Entrada')
+          .copyWith(
+            fadeIn: const Duration(seconds: 1),
+            fadeOut: const Duration(seconds: 2),
+          );
+
+      final preserved = moment.copyWith();
+      final withoutFadeIn = moment.copyWith(clearFadeIn: true);
+      final withoutFadeOut = moment.copyWith(clearFadeOut: true);
+
+      expect(preserved.fadeIn, const Duration(seconds: 1));
+      expect(preserved.fadeOut, const Duration(seconds: 2));
+      expect(withoutFadeIn.fadeIn, isNull);
+      expect(withoutFadeIn.fadeOut, const Duration(seconds: 2));
+      expect(withoutFadeOut.fadeIn, const Duration(seconds: 1));
+      expect(withoutFadeOut.fadeOut, isNull);
+    });
+
     test('JSON round trip restores fields and imported audio is pending', () {
-      const moment = EventMoment(
+      final moment = EventMoment(
         id: 'a',
         position: 3,
         name: 'Entrada',
@@ -117,7 +164,7 @@ void main() {
         name: source.name,
         createdAt: source.createdAt,
         updatedAt: source.updatedAt,
-        settings: source.settings,
+        audioSettings: source.audioSettings,
         moments: moments,
       );
 
@@ -136,6 +183,101 @@ void main() {
       moments.clear();
 
       expect(event.moments.map((moment) => moment.id), ['a']);
+    });
+
+    test('construction rejects duplicate moment ids explicitly', () {
+      final source = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final moments = [
+        EventMoment.create(id: 'a', position: 0, name: 'Entrada'),
+        EventMoment.create(id: 'a', position: 1, name: 'Saída'),
+      ];
+
+      expect(
+        () => SoundTrackEvent(
+          id: source.id,
+          name: source.name,
+          createdAt: source.createdAt,
+          updatedAt: source.updatedAt,
+          audioSettings: source.audioSettings,
+          moments: moments,
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'Duplicate moment id: a.',
+          ),
+        ),
+      );
+    });
+
+    test('addMoment rejects a duplicate id explicitly', () {
+      final event = SoundTrackEvent.create(
+        id: 'event-1',
+        name: 'Formatura',
+      ).addMoment(EventMoment.create(id: 'a', position: 0, name: 'Entrada'));
+
+      expect(
+        () => event.addMoment(
+          EventMoment.create(id: 'a', position: 1, name: 'Saída'),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'Duplicate moment id: a.',
+          ),
+        ),
+      );
+    });
+
+    test('all construction paths normalize moment positions', () {
+      final source = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final moments = [
+        EventMoment.create(id: 'a', position: 8, name: 'Entrada'),
+        EventMoment.create(id: 'b', position: -4, name: 'Saída'),
+      ];
+      final constructed = SoundTrackEvent(
+        id: source.id,
+        name: source.name,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt,
+        audioSettings: source.audioSettings,
+        moments: moments,
+      );
+      final copied = source.copyWith(moments: moments);
+      final json = constructed.toJson();
+      json['moments'] = [
+        moments.first.copyWith(position: 12).toJson(),
+        moments.last.copyWith(position: 14).toJson(),
+      ];
+      final restored = SoundTrackEvent.fromJson(json);
+
+      expect(constructed.moments.map((moment) => moment.position), [0, 1]);
+      expect(copied.moments.map((moment) => moment.position), [0, 1]);
+      expect(restored.moments.map((moment) => moment.position), [0, 1]);
+    });
+
+    test('construction and copyWith normalize timestamps to UTC', () {
+      final localCreatedAt = DateTime(2026, 6, 29, 10);
+      final localUpdatedAt = DateTime(2026, 6, 29, 11);
+      final source = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final event = SoundTrackEvent(
+        id: source.id,
+        name: source.name,
+        createdAt: localCreatedAt,
+        updatedAt: localUpdatedAt,
+        audioSettings: source.audioSettings,
+        moments: const [],
+      );
+      final copied = event.copyWith(updatedAt: localCreatedAt);
+
+      expect(event.createdAt, localCreatedAt.toUtc());
+      expect(event.updatedAt, localUpdatedAt.toUtc());
+      expect(event.createdAt.isUtc, isTrue);
+      expect(event.updatedAt.isUtc, isTrue);
+      expect(copied.updatedAt, localCreatedAt.toUtc());
+      expect(copied.updatedAt.isUtc, isTrue);
     });
 
     test('add, update, and remove maintain aggregate invariants', () {
@@ -163,6 +305,14 @@ void main() {
       expect(removed.updatedAt.isBefore(updated.updatedAt), isFalse);
     });
 
+    test('removeMoment rejects an id outside the event', () {
+      final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+      final updatedAt = event.updatedAt;
+
+      expect(() => event.removeMoment('missing'), throwsStateError);
+      expect(event.updatedAt, updatedAt);
+    });
+
     test('reorder rewrites contiguous positions', () {
       final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura')
           .addMoment(EventMoment.create(id: 'a', position: 0, name: 'Recepção'))
@@ -172,41 +322,66 @@ void main() {
       expect(reordered.moments.map((m) => m.position), [0, 1]);
     });
 
-    test('JSON restores UTC dates, settings, moments, and replacement id', () {
-      final source = SoundTrackEvent.create(id: 'old', name: 'Formatura')
-          .addMoment(
-            const EventMoment(
-              id: 'a',
-              position: 0,
-              name: 'Entrada',
-              audio: AudioReference(
-                uri: 'content://song',
-                displayName: 'Song',
-                pending: false,
-                artist: null,
-                duration: null,
-              ),
-              endBehavior: EndBehavior.stop,
-              narrationEnabled: true,
-              gainDb: 1,
-              fadeIn: null,
-              fadeOut: null,
-            ),
-          );
+    test('reorder moves upward and rejects invalid indices', () {
+      final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura')
+          .addMoment(EventMoment.create(id: 'a', position: 0, name: 'A'))
+          .addMoment(EventMoment.create(id: 'b', position: 1, name: 'B'))
+          .addMoment(EventMoment.create(id: 'c', position: 2, name: 'C'));
 
-      final restored = SoundTrackEvent.fromJson(
-        source.toJson(),
-        imported: true,
-        replacementId: 'new',
+      final reordered = event.reorderMoment(oldIndex: 2, newIndex: 0);
+
+      expect(reordered.moments.map((moment) => moment.id), ['c', 'a', 'b']);
+      expect(reordered.moments.map((moment) => moment.position), [0, 1, 2]);
+      expect(
+        () => event.reorderMoment(oldIndex: -1, newIndex: 0),
+        throwsRangeError,
       );
-
-      expect(restored.id, 'new');
-      expect(restored.name, source.name);
-      expect(restored.createdAt.isUtc, isTrue);
-      expect(restored.updatedAt.isUtc, isTrue);
-      expect(restored.settings, source.settings);
-      expect(restored.moments.single.audio!.pending, isTrue);
+      expect(
+        () => event.reorderMoment(oldIndex: 0, newIndex: 4),
+        throwsRangeError,
+      );
     });
+
+    test(
+      'JSON restores UTC dates, audio settings, moments, and replacement id',
+      () {
+        final source = SoundTrackEvent.create(id: 'old', name: 'Formatura')
+            .addMoment(
+              EventMoment(
+                id: 'a',
+                position: 0,
+                name: 'Entrada',
+                audio: AudioReference(
+                  uri: 'content://song',
+                  displayName: 'Song',
+                  pending: false,
+                  artist: null,
+                  duration: null,
+                ),
+                endBehavior: EndBehavior.stop,
+                narrationEnabled: true,
+                gainDb: 1,
+                fadeIn: null,
+                fadeOut: null,
+              ),
+            );
+
+        final restored = SoundTrackEvent.fromJson(
+          source.toJson(),
+          imported: true,
+          replacementId: 'new',
+        );
+
+        expect(restored.id, 'new');
+        expect(restored.name, source.name);
+        expect(restored.createdAt.isUtc, isTrue);
+        expect(restored.updatedAt.isUtc, isTrue);
+        expect(restored.audioSettings, source.audioSettings);
+        expect(restored.moments.single.audio!.pending, isTrue);
+        expect(source.toJson()['audioSettings'], source.audioSettings.toJson());
+        expect(source.toJson().containsKey('settings'), isFalse);
+      },
+    );
 
     test('copyWith preserves createdAt and replaces supported fields', () {
       final source = SoundTrackEvent.create(id: 'old', name: 'Formatura');
@@ -215,7 +390,7 @@ void main() {
         id: 'new',
         name: 'Casamento',
         updatedAt: updatedAt,
-        settings: source.settings.copyWith(masterVolume: 0.5),
+        audioSettings: source.audioSettings.copyWith(masterVolume: 0.5),
         moments: [EventMoment.create(id: 'a', position: 0, name: 'Entrada')],
       );
 
@@ -223,7 +398,7 @@ void main() {
       expect(copy.name, 'Casamento');
       expect(copy.createdAt, source.createdAt);
       expect(copy.updatedAt, updatedAt);
-      expect(copy.settings.masterVolume, 0.5);
+      expect(copy.audioSettings.masterVolume, 0.5);
       expect(copy.moments.single.id, 'a');
     });
   });

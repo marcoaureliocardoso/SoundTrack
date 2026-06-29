@@ -7,16 +7,27 @@ class SoundTrackEvent {
     required String name,
     required DateTime createdAt,
     required DateTime updatedAt,
-    required EventAudioSettings settings,
+    required EventAudioSettings audioSettings,
     required List<EventMoment> moments,
   }) {
+    final normalizedMoments = <EventMoment>[];
+    final momentIds = <String>{};
+    for (final moment in moments) {
+      if (!momentIds.add(moment.id)) {
+        throw ArgumentError('Duplicate moment id: ${moment.id}.');
+      }
+      normalizedMoments.add(
+        moment.copyWith(position: normalizedMoments.length),
+      );
+    }
+
     return SoundTrackEvent._(
-      List.unmodifiable(moments),
+      List.unmodifiable(normalizedMoments),
       id: id,
       name: name,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      settings: settings,
+      createdAt: createdAt.toUtc(),
+      updatedAt: updatedAt.toUtc(),
+      audioSettings: audioSettings,
     );
   }
 
@@ -26,7 +37,7 @@ class SoundTrackEvent {
     required this.name,
     required this.createdAt,
     required this.updatedAt,
-    required this.settings,
+    required this.audioSettings,
   });
 
   factory SoundTrackEvent.create({required String id, required String name}) {
@@ -36,7 +47,7 @@ class SoundTrackEvent {
       name: name,
       createdAt: now,
       updatedAt: now,
-      settings: const EventAudioSettings.defaults(),
+      audioSettings: const EventAudioSettings.defaults(),
       moments: const [],
     );
   }
@@ -52,8 +63,8 @@ class SoundTrackEvent {
       name: json['name'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
-      settings: EventAudioSettings.fromJson(
-        Map<String, Object?>.from(json['settings'] as Map),
+      audioSettings: EventAudioSettings.fromJson(
+        Map<String, Object?>.from(json['audioSettings'] as Map),
       ),
       moments: momentJson
           .map(
@@ -70,7 +81,7 @@ class SoundTrackEvent {
   final String name;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final EventAudioSettings settings;
+  final EventAudioSettings audioSettings;
   final List<EventMoment> _moments;
 
   List<EventMoment> get moments => List.unmodifiable(_moments);
@@ -97,13 +108,13 @@ class SoundTrackEvent {
   }
 
   SoundTrackEvent removeMoment(String momentId) {
-    final remaining = _moments
-        .where((moment) => moment.id != momentId)
-        .toList();
-    return copyWith(
-      updatedAt: DateTime.now().toUtc(),
-      moments: _withContiguousPositions(remaining),
-    );
+    final index = _moments.indexWhere((moment) => moment.id == momentId);
+    if (index == -1) {
+      throw StateError('Moment $momentId does not belong to event $id.');
+    }
+
+    final remaining = [..._moments]..removeAt(index);
+    return copyWith(updatedAt: DateTime.now().toUtc(), moments: remaining);
   }
 
   SoundTrackEvent reorderMoment({
@@ -116,17 +127,14 @@ class SoundTrackEvent {
     }
     final moment = reordered.removeAt(oldIndex);
     reordered.insert(newIndex, moment);
-    return copyWith(
-      updatedAt: DateTime.now().toUtc(),
-      moments: _withContiguousPositions(reordered),
-    );
+    return copyWith(updatedAt: DateTime.now().toUtc(), moments: reordered);
   }
 
   SoundTrackEvent copyWith({
     String? id,
     String? name,
     DateTime? updatedAt,
-    EventAudioSettings? settings,
+    EventAudioSettings? audioSettings,
     List<EventMoment>? moments,
   }) {
     return SoundTrackEvent(
@@ -134,7 +142,7 @@ class SoundTrackEvent {
       name: name ?? this.name,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      settings: settings ?? this.settings,
+      audioSettings: audioSettings ?? this.audioSettings,
       moments: moments ?? _moments,
     );
   }
@@ -145,15 +153,8 @@ class SoundTrackEvent {
       'name': name,
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
-      'settings': settings.toJson(),
+      'audioSettings': audioSettings.toJson(),
       'moments': _moments.map((moment) => moment.toJson()).toList(),
     };
-  }
-
-  static List<EventMoment> _withContiguousPositions(List<EventMoment> moments) {
-    return [
-      for (var index = 0; index < moments.length; index++)
-        moments[index].copyWith(position: index),
-    ];
   }
 }

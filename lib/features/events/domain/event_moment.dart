@@ -3,7 +3,31 @@ import 'audio_reference.dart';
 enum EndBehavior { loop, stop }
 
 class EventMoment {
-  const EventMoment({
+  factory EventMoment({
+    required String id,
+    required int position,
+    required String name,
+    required AudioReference? audio,
+    required EndBehavior endBehavior,
+    required bool narrationEnabled,
+    required double gainDb,
+    required Duration? fadeIn,
+    required Duration? fadeOut,
+  }) {
+    return EventMoment._(
+      id: id,
+      position: position,
+      name: name,
+      audio: audio,
+      endBehavior: endBehavior,
+      narrationEnabled: narrationEnabled,
+      gainDb: gainDb.clamp(-12.0, 6.0),
+      fadeIn: fadeIn,
+      fadeOut: fadeOut,
+    );
+  }
+
+  const EventMoment._({
     required this.id,
     required this.position,
     required this.name,
@@ -81,7 +105,9 @@ class EventMoment {
     bool? narrationEnabled,
     double? gainDb,
     Duration? fadeIn,
+    bool clearFadeIn = false,
     Duration? fadeOut,
+    bool clearFadeOut = false,
   }) {
     return EventMoment(
       id: id ?? this.id,
@@ -91,8 +117,8 @@ class EventMoment {
       endBehavior: endBehavior ?? this.endBehavior,
       narrationEnabled: narrationEnabled ?? this.narrationEnabled,
       gainDb: (gainDb ?? this.gainDb).clamp(-12.0, 6.0),
-      fadeIn: fadeIn ?? this.fadeIn,
-      fadeOut: fadeOut ?? this.fadeOut,
+      fadeIn: clearFadeIn ? null : fadeIn ?? this.fadeIn,
+      fadeOut: clearFadeOut ? null : fadeOut ?? this.fadeOut,
     );
   }
 
