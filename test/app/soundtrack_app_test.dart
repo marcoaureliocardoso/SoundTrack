@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
+
+import '../support/in_memory_event_repository.dart';
 
 void main() {
   testWidgets('opens the event library', (tester) async {
-    await tester.pumpWidget(const SoundTrackApp());
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository(),
+          newEventId: () => 'event-1',
+          newMomentId: () => 'moment-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final appBar = tester.widget<AppBar>(find.byType(AppBar));
@@ -17,10 +29,10 @@ void main() {
     expect(Theme.of(eventLibraryContext).brightness, Brightness.dark);
     expect(
       appBar.title,
-      isA<Text>().having((title) => title.data, 'data', 'SoundTrack'),
+      isA<Text>().having((title) => title.data, 'data', 'Meus Eventos'),
     );
     expect(find.text('Meus Eventos'), findsOneWidget);
     expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(floatingActionButton.onPressed, isNull);
+    expect(floatingActionButton.onPressed, isNotNull);
   });
 }
