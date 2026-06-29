@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import '../domain/soundtrack_event.dart';
 import 'event_repository.dart';
+import 'event_storage_exception.dart';
 
 class JsonFileEventRepository implements EventRepository {
   JsonFileEventRepository(
@@ -14,6 +16,8 @@ class JsonFileEventRepository implements EventRepository {
   final Future<File> Function(File temporaryFile, String destinationPath)
   _promote;
 
+  static final Map<String, Future<void>> _operationTails = {};
+
   File get _file =>
       File('${directory.path}${Platform.pathSeparator}events.json');
 
@@ -21,48 +25,135 @@ class JsonFileEventRepository implements EventRepository {
       File('${directory.path}${Platform.pathSeparator}events.json.tmp');
 
   @override
-  Future<List<SoundTrackEvent>> findAll() async {
-    final events = (await _read()).values.toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return events;
+  Future<List<SoundTrackEvent>> findAll() {
+    return _synchronized(() async {
+      final events = (await _read()).values.toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return events;
+    });
   }
 
   @override
-  Future<SoundTrackEvent?> findById(String id) async {
-    return (await _read())[id];
+  Future<SoundTrackEvent?> findById(String id) {
+    return _synchronized(() async => (await _read())[id]);
   }
 
   @override
-  Future<void> save(SoundTrackEvent event) async {
-    final events = await _read();
-    events[event.id] = event;
-    await _write(events);
+  Future<void> save(SoundTrackEvent event) {
+    return _synchronized(() async {
+      final events = await _read();
+      events[event.id] = event;
+      await _write(events);
+    });
   }
 
   @override
-  Future<void> delete(String id) async {
-    final events = await _read();
-    events.remove(id);
-    await _write(events);
+  Future<void> delete(String id) {
+    return _synchronized(() async {
+      final events = await _read();
+      if (!events.containsKey(id)) {
+        return;
+      }
+      events.remove(id);
+      await _write(events);
+    });
+  }
+
+  Future<T> _synchronized<T>(Future<T> Function() operation) {
+    final storagePath = _file.absolute.path;
+    final previous = _operationTails[storagePath] ?? Future<void>.value();
+    final result = previous.then((_) => operation());
+    late final Future<void> tail;
+    tail = result
+        .then<void>((_) {}, onError: (Object _, StackTrace _) {})
+        .whenComplete(() {
+          if (identical(_operationTails[storagePath], tail)) {
+            _operationTails.remove(storagePath);
+          }
+        });
+    _operationTails[storagePath] = tail;
+    return result;
   }
 
   Future<Map<String, SoundTrackEvent>> _read() async {
-    if (!await _file.exists()) {
+    if (await _file.exists()) {
+      return _readFile(_file);
+    }
+    if (!await _temporaryFile.exists()) {
       return {};
     }
 
-    final envelope = Map<String, Object?>.from(
-      jsonDecode(await _file.readAsString()) as Map,
-    );
-    final eventJson = envelope['events'] as List<Object?>;
-    final events = <String, SoundTrackEvent>{};
-    for (final item in eventJson) {
-      final event = SoundTrackEvent.fromJson(
-        Map<String, Object?>.from(item! as Map),
+    final recovered = await _readFile(_temporaryFile);
+    await _promoteTemporary();
+    return recovered;
+  }
+
+  Future<Map<String, SoundTrackEvent>> _readFile(File source) async {
+    try {
+      final decoded = jsonDecode(await source.readAsString());
+      if (decoded is! Map) {
+        throw _corrupted(source, 'The event store root must be an object.');
+      }
+      final envelope = Map<String, Object?>.from(decoded);
+      final schemaVersion = envelope['schemaVersion'];
+      if (schemaVersion is! int) {
+        throw _corrupted(
+          source,
+          'The event store schemaVersion must be an integer.',
+        );
+      }
+      if (schemaVersion != 1) {
+        throw EventStorageException(
+          code: EventStorageErrorCode.incompatibleSchema,
+          path: source.absolute.path,
+          cause: schemaVersion,
+        );
+      }
+
+      final eventJson = envelope['events'];
+      if (eventJson is! List) {
+        throw _corrupted(source, 'The event store events must be a list.');
+      }
+
+      final validatedJson = <Map<String, Object?>>[];
+      final ids = <String>{};
+      for (final item in eventJson) {
+        if (item is! Map) {
+          throw _corrupted(source, 'Each stored event must be an object.');
+        }
+        final json = Map<String, Object?>.from(item);
+        final id = json['id'];
+        if (id is! String) {
+          throw _corrupted(source, 'Each stored event must have a string id.');
+        }
+        if (!ids.add(id)) {
+          throw _corrupted(source, 'Duplicate stored event id: $id.');
+        }
+        validatedJson.add(json);
+      }
+
+      return {
+        for (final json in validatedJson)
+          json['id']! as String: SoundTrackEvent.fromJson(json),
+      };
+    } on EventStorageException {
+      rethrow;
+    } catch (error, stackTrace) {
+      throw EventStorageException(
+        code: EventStorageErrorCode.corruptedData,
+        path: source.absolute.path,
+        cause: error,
+        stackTrace: stackTrace,
       );
-      events[event.id] = event;
     }
-    return events;
+  }
+
+  EventStorageException _corrupted(File source, String message) {
+    return EventStorageException(
+      code: EventStorageErrorCode.corruptedData,
+      path: source.absolute.path,
+      cause: FormatException(message),
+    );
   }
 
   Future<void> _write(Map<String, SoundTrackEvent> events) async {
@@ -72,6 +163,12 @@ class JsonFileEventRepository implements EventRepository {
       'events': events.values.map((event) => event.toJson()).toList(),
     });
     await _temporaryFile.writeAsString(json, flush: true);
+    await _promoteTemporary();
+  }
+
+  Future<void> _promoteTemporary() async {
+    // Final replacement relies on rename semantics from the filesystem backing
+    // Android app-private storage; Dart does not expose a directory fsync.
     await _promote(_temporaryFile, _file.path);
   }
 

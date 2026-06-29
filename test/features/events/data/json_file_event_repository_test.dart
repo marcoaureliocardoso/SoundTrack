@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/events/data/event_storage_exception.dart';
 import 'package:soundtrack/features/events/data/json_file_event_repository.dart';
 import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
@@ -108,6 +110,220 @@ void main() {
 
     expect(events.map((event) => event.id), ['newer', 'older']);
   });
+
+  test('serializes overlapping saves from different instances', () async {
+    final promotions = _ControlledPromotions();
+    final firstRepository = JsonFileEventRepository(
+      directory,
+      promote: promotions.promoteFirst,
+    );
+    final secondRepository = JsonFileEventRepository(
+      directory,
+      promote: promotions.promoteSecond,
+    );
+
+    final firstSave = firstRepository.save(_event(id: 'a', name: 'A'));
+    await promotions.firstEntered.future;
+    final secondSave = secondRepository.save(_event(id: 'b', name: 'B'));
+    final secondEnteredBeforeRelease = await Future.any([
+      promotions.secondEntered.future.then((_) => true),
+      Future<bool>.delayed(const Duration(milliseconds: 50), () => false),
+    ]);
+
+    promotions.releaseFirst.complete();
+    Object? saveError;
+    try {
+      await Future.wait([firstSave, secondSave]);
+    } catch (error) {
+      saveError = error;
+    }
+
+    expect(secondEnteredBeforeRelease, isFalse);
+    expect(saveError, isNull);
+    expect(
+      (await JsonFileEventRepository(
+        directory,
+      ).findAll()).map((event) => event.id).toSet(),
+      {'a', 'b'},
+    );
+  });
+
+  test('serializes reads behind an in-progress save', () async {
+    await repository.save(_event(id: 'a', name: 'Original'));
+    final promotionEntered = Completer<void>();
+    final releasePromotion = Completer<void>();
+    final updatingRepository = JsonFileEventRepository(
+      directory,
+      promote: (temporaryFile, destinationPath) async {
+        promotionEntered.complete();
+        await releasePromotion.future;
+        return temporaryFile.rename(destinationPath);
+      },
+    );
+
+    final save = updatingRepository.save(_event(id: 'a', name: 'Atualizado'));
+    await promotionEntered.future;
+    var readCompleted = false;
+    final read = JsonFileEventRepository(directory).findById('a').then((event) {
+      readCompleted = true;
+      return event;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final completedBeforeRelease = readCompleted;
+
+    releasePromotion.complete();
+    await save;
+
+    expect(completedBeforeRelease, isFalse);
+    expect((await read)?.name, 'Atualizado');
+  });
+
+  test('continues the path queue after an operation fails', () async {
+    await repository.save(_event(id: 'a', name: 'Original'));
+    final failingRepository = JsonFileEventRepository(
+      directory,
+      promote: (temporaryFile, destinationPath) async {
+        throw FileSystemException('Promotion failed.', temporaryFile.path);
+      },
+    );
+
+    await expectLater(
+      failingRepository.save(_event(id: 'a', name: 'Falha')),
+      throwsA(isA<FileSystemException>()),
+    );
+    await JsonFileEventRepository(
+      directory,
+    ).save(_event(id: 'b', name: 'Seguinte'));
+
+    expect((await repository.findAll()).map((event) => event.id).toSet(), {
+      'a',
+      'b',
+    });
+  });
+
+  test('does not rewrite storage when deleting a missing id', () async {
+    final failingRepository = JsonFileEventRepository(
+      directory,
+      promote: (temporaryFile, destinationPath) async {
+        throw FileSystemException('Promotion should not run.');
+      },
+    );
+
+    await failingRepository.delete('missing');
+
+    expect(
+      File(
+        '${directory.path}${Platform.pathSeparator}events.json',
+      ).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('rejects a future schema with a typed storage error', () async {
+    final file = File('${directory.path}${Platform.pathSeparator}events.json');
+    await file.writeAsString(
+      jsonEncode({'schemaVersion': 2, 'events': <Object?>[]}),
+    );
+
+    await expectLater(
+      repository.findAll(),
+      throwsA(
+        isA<EventStorageException>()
+            .having(
+              (error) => error.code,
+              'code',
+              EventStorageErrorCode.incompatibleSchema,
+            )
+            .having((error) => error.path, 'path', file.absolute.path)
+            .having((error) => error.cause, 'cause', 2),
+      ),
+    );
+  });
+
+  test('rejects duplicate event ids as corrupted data', () async {
+    final event = _event(id: 'duplicate', name: 'Duplicado');
+    final file = File('${directory.path}${Platform.pathSeparator}events.json');
+    await file.writeAsString(
+      jsonEncode({
+        'schemaVersion': 1,
+        'events': [event.toJson(), event.toJson()],
+      }),
+    );
+
+    await expectLater(
+      repository.findAll(),
+      throwsA(
+        isA<EventStorageException>()
+            .having(
+              (error) => error.code,
+              'code',
+              EventStorageErrorCode.corruptedData,
+            )
+            .having((error) => error.path, 'path', file.absolute.path),
+      ),
+    );
+  });
+
+  test('recovers a valid temporary store when the final is absent', () async {
+    final temporaryFile = File(
+      '${directory.path}${Platform.pathSeparator}events.json.tmp',
+    );
+    await temporaryFile.writeAsString(
+      jsonEncode({
+        'schemaVersion': 1,
+        'events': [_event(id: 'recovered', name: 'Recuperado').toJson()],
+      }),
+    );
+
+    final restored = await repository.findById('recovered');
+
+    expect(restored?.name, 'Recuperado');
+    expect(temporaryFile.existsSync(), isFalse);
+    expect(
+      File(
+        '${directory.path}${Platform.pathSeparator}events.json',
+      ).existsSync(),
+      isTrue,
+    );
+  });
+
+  test('rejects a truncated temporary store without promoting it', () async {
+    final temporaryFile = File(
+      '${directory.path}${Platform.pathSeparator}events.json.tmp',
+    );
+    final finalFile = File(
+      '${directory.path}${Platform.pathSeparator}events.json',
+    );
+    await temporaryFile.writeAsString('{"schemaVersion":1,"events":[');
+
+    await expectLater(
+      repository.findAll(),
+      throwsA(
+        isA<EventStorageException>()
+            .having(
+              (error) => error.code,
+              'code',
+              EventStorageErrorCode.corruptedData,
+            )
+            .having((error) => error.path, 'path', temporaryFile.absolute.path),
+      ),
+    );
+    expect(finalFile.existsSync(), isFalse);
+    expect(temporaryFile.existsSync(), isTrue);
+  });
+
+  test('uses the final store when a residual temporary file exists', () async {
+    await repository.save(_event(id: 'final', name: 'Final'));
+    final temporaryFile = File(
+      '${directory.path}${Platform.pathSeparator}events.json.tmp',
+    );
+    await temporaryFile.writeAsString('truncated');
+
+    final events = await repository.findAll();
+
+    expect(events.map((event) => event.id), ['final']);
+    expect(temporaryFile.existsSync(), isTrue);
+  });
 }
 
 SoundTrackEvent _event({
@@ -123,4 +339,27 @@ SoundTrackEvent _event({
     audioSettings: const EventAudioSettings.defaults(),
     moments: const [],
   );
+}
+
+class _ControlledPromotions {
+  final firstEntered = Completer<void>();
+  final secondEntered = Completer<void>();
+  final releaseFirst = Completer<void>();
+  final _firstFinished = Completer<void>();
+
+  Future<File> promoteFirst(File temporaryFile, String destinationPath) async {
+    firstEntered.complete();
+    await releaseFirst.future;
+    try {
+      return await temporaryFile.rename(destinationPath);
+    } finally {
+      _firstFinished.complete();
+    }
+  }
+
+  Future<File> promoteSecond(File temporaryFile, String destinationPath) async {
+    secondEntered.complete();
+    await _firstFinished.future;
+    return temporaryFile.rename(destinationPath);
+  }
 }
