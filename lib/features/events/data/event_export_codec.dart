@@ -16,9 +16,28 @@ class EventExportCodec {
   const EventExportCodec();
 
   String encode(SoundTrackEvent event, DateTime exportedAt) {
-    return jsonEncode(
-      EventExport.create(event: event, exportedAt: exportedAt).toJson(),
-    );
+    final envelope = EventExport.create(
+      event: event,
+      exportedAt: exportedAt,
+    ).toJson();
+    final canonicalByUri = <String, Map<String, Object?>>{
+      for (final value in envelope['audioSources']! as List)
+        (value as Map)['uri']! as String: Map<String, Object?>.from(value),
+    };
+    final eventJson = Map<String, Object?>.from(envelope['event']! as Map);
+    final moments = (eventJson['moments']! as List).map((value) {
+      final moment = Map<String, Object?>.from(value as Map);
+      final audio = moment['audio'];
+      if (audio is Map) {
+        final uri = audio['uri'];
+        final canonical = canonicalByUri[uri];
+        if (canonical != null) moment['audio'] = {...canonical};
+      }
+      return moment;
+    }).toList();
+    eventJson['moments'] = moments;
+    envelope['event'] = eventJson;
+    return jsonEncode(envelope);
   }
 
   Future<SoundTrackEvent> decode(

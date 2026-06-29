@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/events/application/event_editor_controller.dart';
 import 'package:soundtrack/features/events/application/event_library_controller.dart';
 import 'package:soundtrack/features/events/application/event_transfer_controller.dart';
 import 'package:soundtrack/features/events/data/event_export_codec.dart';
@@ -176,10 +177,11 @@ void main() {
   testWidgets('running import disables export and ignores import reentry', (
     tester,
   ) async {
+    final repository = InMemoryEventRepository([
+      SoundTrackEvent.create(id: 'event-1', name: 'Party'),
+    ]);
     final controller = EventLibraryController(
-      repository: InMemoryEventRepository([
-        SoundTrackEvent.create(id: 'event-1', name: 'Party'),
-      ]),
+      repository: repository,
       newId: () => 'event-2',
     );
     final imported = Completer<SoundTrackEvent?>();
@@ -188,7 +190,11 @@ void main() {
       MaterialApp(
         home: EventLibraryPage(
           controller: controller,
-          createEditorController: (_) => throw UnimplementedError(),
+          createEditorController: (event) => EventEditorController(
+            repository: repository,
+            initial: event,
+            newId: () => 'moment',
+          ),
           onExport: (_) async => true,
           onImport: () {
             importCalls++;
@@ -211,6 +217,13 @@ void main() {
           .onPressed,
       isNull,
     );
+    await tester.tap(find.byKey(addEventKey));
+    await tester.pump();
+    expect(find.text('Novo evento'), findsNothing);
+    await tester.tap(find.byType(EventCard), warnIfMissed: false);
+    await tester.pump();
+    expect(find.text('Editar evento'), findsNothing);
+    expect((await repository.findAll()).length, 1);
     imported.complete(null);
     await tester.pumpAndSettle();
   });

@@ -72,42 +72,45 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
             ),
         ],
       ),
-      body: ListenableBuilder(
-        listenable: widget.controller,
-        builder: (context, _) {
-          if (widget.controller.loading && widget.controller.events.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (widget.controller.error != null &&
-              widget.controller.events.isEmpty) {
-            return _ErrorView(onRetry: widget.controller.load);
-          }
-          if (widget.controller.events.isEmpty) {
-            return const Center(
-              child: Text('Nenhum evento. Crie o primeiro para começar.'),
+      body: AbsorbPointer(
+        absorbing: _documentBusy,
+        child: ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) {
+            if (widget.controller.loading && widget.controller.events.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (widget.controller.error != null &&
+                widget.controller.events.isEmpty) {
+              return _ErrorView(onRetry: widget.controller.load);
+            }
+            if (widget.controller.events.isEmpty) {
+              return const Center(
+                child: Text('Nenhum evento. Crie o primeiro para começar.'),
+              );
+            }
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                itemCount: widget.controller.events.length,
+                itemBuilder: (context, index) {
+                  final event = widget.controller.events[index];
+                  return EventCard(
+                    key: ValueKey(event.id),
+                    event: event,
+                    exportEnabled: widget.onExport != null && !_documentBusy,
+                    onAction: (action) => _handleAction(event, action),
+                  );
+                },
+              ),
             );
-          }
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-              itemCount: widget.controller.events.length,
-              itemBuilder: (context, index) {
-                final event = widget.controller.events[index];
-                return EventCard(
-                  key: ValueKey(event.id),
-                  event: event,
-                  exportEnabled: widget.onExport != null && !_documentBusy,
-                  onAction: (action) => _handleAction(event, action),
-                );
-              },
-            ),
-          );
-        },
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         key: addEventKey,
-        onPressed: _create,
+        onPressed: _documentBusy ? null : _create,
         icon: const Icon(Icons.add),
         label: const Text('Evento'),
       ),
@@ -118,6 +121,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     SoundTrackEvent event,
     EventCardAction action,
   ) async {
+    if (_documentBusy) return;
     switch (action) {
       case EventCardAction.open:
         await _open(event);
@@ -154,6 +158,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
   }
 
   Future<void> _create() async {
+    if (_documentBusy) return;
     final name = await _requestName(title: 'Novo evento', actionLabel: 'Criar');
     if (name == null) {
       return;
@@ -162,6 +167,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
   }
 
   Future<void> _refresh() async {
+    if (_documentBusy) return;
     await widget.controller.load();
     if (mounted && widget.controller.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,7 +176,11 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     }
   }
 
-  Future<void> _open(SoundTrackEvent event) async {
+  Future<void> _open(
+    SoundTrackEvent event, {
+    bool allowWhileDocumentBusy = false,
+  }) async {
+    if (_documentBusy && !allowWhileDocumentBusy) return;
     final editorController = widget.createEditorController(event);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -211,7 +221,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
         if (mounted) await widget.controller.load();
       } else {
         _message('Evento importado');
-        await _open(imported);
+        await _open(imported, allowWhileDocumentBusy: true);
       }
     } catch (error) {
       if (mounted) _message(eventDocumentErrorMessage(error));

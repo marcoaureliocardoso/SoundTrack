@@ -298,6 +298,43 @@ void main() {
       );
     },
   );
+
+  test(
+    'self-generated export canonicalizes divergent shared metadata',
+    () async {
+      final divergent = event.copyWith(
+        moments: [
+          event.moments.single,
+          event.moments.single.copyWith(
+            id: 'm2',
+            audio: const AudioReference(
+              uri: 'content://song',
+              displayName: 'other-name.mp3',
+              pending: false,
+              artist: 'Other artist',
+              duration: Duration(seconds: 99),
+            ),
+          ),
+        ],
+      );
+      final encoded = codec.encode(divergent, DateTime.utc(2026));
+      final imported = await codec.decode(
+        encoded,
+        replacementId: 'new',
+        canRead: (_) async => false,
+        probeAudio: (_) async => throw StateError('must not probe'),
+      );
+      expect(
+        imported.moments.map((moment) => moment.audio!.displayName),
+        everyElement('song.mp3'),
+      );
+      expect(
+        imported.moments.map((moment) => moment.audio!.artist),
+        everyElement('Old'),
+      );
+      expect(divergent.moments[1].audio!.artist, 'Other artist');
+    },
+  );
 }
 
 Future<SoundTrackEvent> _decode(
