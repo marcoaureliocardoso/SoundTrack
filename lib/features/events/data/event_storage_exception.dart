@@ -1,4 +1,4 @@
-enum EventStorageErrorCode { incompatibleSchema, corruptedData }
+enum EventStorageErrorCode { incompatibleSchema, corruptedData, storageFailure }
 
 class EventStorageException implements Exception {
   const EventStorageException({

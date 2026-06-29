@@ -7,6 +7,8 @@ import 'event_repository.dart';
 import 'event_storage_exception.dart';
 
 class JsonFileEventRepository implements EventRepository {
+  /// [promote] is an internal test seam. It must not reenter repository
+  /// methods targeting the same storage path.
   JsonFileEventRepository(
     this.directory, {
     Future<File> Function(File temporaryFile, String destinationPath)? promote,
@@ -60,6 +62,8 @@ class JsonFileEventRepository implements EventRepository {
   }
 
   Future<T> _synchronized<T>(Future<T> Function() operation) {
+    // The absolute-path key assumes callers use the canonical app directory
+    // supplied by path_provider.
     final storagePath = _file.absolute.path;
     final previous = _operationTails[storagePath] ?? Future<void>.value();
     final result = previous.then((_) => operation());
@@ -163,7 +167,36 @@ class JsonFileEventRepository implements EventRepository {
       'events': events.values.map((event) => event.toJson()).toList(),
     });
     await _temporaryFile.writeAsString(json, flush: true);
-    await _promoteTemporary();
+    try {
+      await _promoteTemporary();
+    } catch (error, stackTrace) {
+      await _discardFailedLiveTemporary(error, stackTrace);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<void> _discardFailedLiveTemporary(
+    Object promotionError,
+    StackTrace promotionStackTrace,
+  ) async {
+    try {
+      if (await _temporaryFile.exists()) {
+        await _temporaryFile.delete();
+      }
+      return;
+    } catch (_) {
+      try {
+        await _temporaryFile.rename('${_temporaryFile.path}.failed');
+        return;
+      } catch (_) {
+        throw EventStorageException(
+          code: EventStorageErrorCode.storageFailure,
+          path: _temporaryFile.absolute.path,
+          cause: promotionError,
+          stackTrace: promotionStackTrace,
+        );
+      }
+    }
   }
 
   Future<void> _promoteTemporary() async {

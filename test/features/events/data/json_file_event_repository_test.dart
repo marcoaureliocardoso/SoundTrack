@@ -82,19 +82,34 @@ void main() {
     );
 
     final restored = await JsonFileEventRepository(directory).findById('a');
-    final temporaryEnvelope =
-        jsonDecode(
-              await File(
-                '${directory.path}${Platform.pathSeparator}events.json.tmp',
-              ).readAsString(),
-            )
-            as Map<String, Object?>;
-    final temporaryEvents = temporaryEnvelope['events'] as List<Object?>;
+    final temporaryFile = File(
+      '${directory.path}${Platform.pathSeparator}events.json.tmp',
+    );
 
     expect(restored?.name, 'Original');
+    expect(temporaryFile.existsSync(), isFalse);
+  });
+
+  test('does not recover a save whose live promotion failed', () async {
+    final failingRepository = JsonFileEventRepository(
+      directory,
+      promote: (temporaryFile, destinationPath) async {
+        throw FileSystemException('Promotion failed.', temporaryFile.path);
+      },
+    );
+
+    await expectLater(
+      failingRepository.save(_event(id: 'a', name: 'Rejeitado')),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    final reopened = JsonFileEventRepository(directory);
+    expect(await reopened.findAll(), isEmpty);
     expect(
-      (temporaryEvents.single as Map<String, Object?>)['name'],
-      'Atualizado',
+      File(
+        '${directory.path}${Platform.pathSeparator}events.json',
+      ).existsSync(),
+      isFalse,
     );
   });
 
@@ -151,30 +166,22 @@ void main() {
   test('serializes reads behind an in-progress save', () async {
     await repository.save(_event(id: 'a', name: 'Original'));
     final promotionEntered = Completer<void>();
-    final releasePromotion = Completer<void>();
+    final allowPromotion = Completer<void>();
     final updatingRepository = JsonFileEventRepository(
       directory,
       promote: (temporaryFile, destinationPath) async {
         promotionEntered.complete();
-        await releasePromotion.future;
+        await allowPromotion.future;
         return temporaryFile.rename(destinationPath);
       },
     );
 
     final save = updatingRepository.save(_event(id: 'a', name: 'Atualizado'));
     await promotionEntered.future;
-    var readCompleted = false;
-    final read = JsonFileEventRepository(directory).findById('a').then((event) {
-      readCompleted = true;
-      return event;
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    final completedBeforeRelease = readCompleted;
-
-    releasePromotion.complete();
+    final read = JsonFileEventRepository(directory).findById('a');
+    allowPromotion.complete();
     await save;
 
-    expect(completedBeforeRelease, isFalse);
     expect((await read)?.name, 'Atualizado');
   });
 
