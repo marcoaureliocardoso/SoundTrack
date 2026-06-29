@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../application/event_editor_controller.dart';
 import '../application/event_library_controller.dart';
 import '../application/event_transfer_controller.dart';
+import '../data/event_export_codec.dart';
 import '../domain/audio_reference.dart';
 import '../domain/soundtrack_event.dart';
+import '../../../platform/documents/document_gateway.dart';
 import 'audio_relink_page.dart';
 import 'event_editor_page.dart';
 import 'widgets/event_card.dart';
@@ -40,6 +42,8 @@ class EventLibraryPage extends StatefulWidget {
 }
 
 class _EventLibraryPageState extends State<EventLibraryPage> {
+  bool _documentBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -52,9 +56,17 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       appBar: AppBar(
         title: const Text('Meus Eventos'),
         actions: [
+          if (_documentBusy)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           if (widget.onImport != null)
             TextButton.icon(
-              onPressed: _import,
+              onPressed: _documentBusy ? null : _import,
               icon: const Icon(Icons.file_open),
               label: const Text('Importar'),
             ),
@@ -85,7 +97,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
                 return EventCard(
                   key: ValueKey(event.id),
                   event: event,
-                  exportEnabled: widget.onExport != null,
+                  exportEnabled: widget.onExport != null && !_documentBusy,
                   onAction: (action) => _handleAction(event, action),
                 );
               },
@@ -121,15 +133,19 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
           await _run(() => widget.controller.rename(event.id, name));
         }
       case EventCardAction.export:
+        if (_documentBusy) return;
         final export = widget.onExport;
         if (export != null) {
+          setState(() => _documentBusy = true);
           try {
             final exported = await export(event);
             if (mounted) {
               _message(exported ? 'Evento exportado' : 'Exportação cancelada');
             }
-          } catch (_) {
-            if (mounted) _message('Não foi possível exportar o evento');
+          } catch (error) {
+            if (mounted) _message(eventDocumentErrorMessage(error));
+          } finally {
+            if (mounted) setState(() => _documentBusy = false);
           }
         }
       case EventCardAction.delete:
@@ -171,6 +187,8 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
   }
 
   Future<void> _import() async {
+    if (_documentBusy) return;
+    setState(() => _documentBusy = true);
     try {
       final imported = await widget.onImport?.call();
       if (!mounted) return;
@@ -195,8 +213,10 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
         _message('Evento importado');
         await _open(imported);
       }
-    } catch (_) {
-      if (mounted) _message('Não foi possível importar o evento');
+    } catch (error) {
+      if (mounted) _message(eventDocumentErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _documentBusy = false);
     }
   }
 
@@ -274,6 +294,25 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       }
     }
   }
+}
+
+String eventDocumentErrorMessage(Object error) {
+  if (error == EventImportException.invalidJson) {
+    return 'Arquivo inválido. Escolha uma exportação do SoundTrack.';
+  }
+  if (error == EventImportException.unsupportedFormat) {
+    return 'Formato não reconhecido. Escolha um arquivo .soundtrack.json.';
+  }
+  if (error == EventImportException.unsupportedVersion) {
+    return 'Versão do arquivo não suportada. Atualize o SoundTrack.';
+  }
+  if (error is DocumentGatewayException) {
+    if (error.code == 'picker_busy') {
+      return 'Já existe um seletor de arquivos aberto.';
+    }
+    return 'Não foi possível acessar o arquivo. Verifique o armazenamento e tente novamente.';
+  }
+  return 'Não foi possível concluir a operação com o arquivo.';
 }
 
 class _ErrorView extends StatelessWidget {

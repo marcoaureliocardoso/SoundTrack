@@ -57,7 +57,7 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
           onPressed: _busyMomentId == null
               ? () => Navigator.of(context).pop(_event)
               : null,
-          child: const Text('Resolver depois'),
+          child: Text(_pending.isEmpty ? 'Concluir' : 'Resolver depois'),
         ),
       ),
     );
@@ -101,7 +101,13 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
       if (mounted) setState(() => _event = updated);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Não foi possível usar esse arquivo de áudio.');
+        final moment = _event.moments.firstWhere(
+          (candidate) => candidate.id == momentId,
+        );
+        setState(
+          () => _error =
+              'Não foi possível religar “${moment.name}”. Escolha outro arquivo de áudio.',
+        );
       }
     } finally {
       if (mounted) setState(() => _busyMomentId = null);

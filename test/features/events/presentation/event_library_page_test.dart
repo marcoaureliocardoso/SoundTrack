@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/events/application/event_library_controller.dart';
@@ -126,6 +128,118 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Localizar músicas'), findsOneWidget);
     expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+  });
+
+  testWidgets('document operation blocks import and export reentry', (
+    tester,
+  ) async {
+    final repository = InMemoryEventRepository([
+      SoundTrackEvent.create(id: 'event-1', name: 'Party'),
+    ]);
+    final controller = EventLibraryController(
+      repository: repository,
+      newId: () => 'event-2',
+    );
+    final export = Completer<bool>();
+    var importCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+          onExport: (_) => export.future,
+          onImport: () async {
+            importCalls++;
+            return null;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<EventCardAction>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exportar'));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final importButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Importar'),
+    );
+    expect(importButton.onPressed, isNull);
+    expect(importCalls, 0);
+
+    export.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.text('Evento exportado'), findsOneWidget);
+  });
+
+  testWidgets('running import disables export and ignores import reentry', (
+    tester,
+  ) async {
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository([
+        SoundTrackEvent.create(id: 'event-1', name: 'Party'),
+      ]),
+      newId: () => 'event-2',
+    );
+    final imported = Completer<SoundTrackEvent?>();
+    var importCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+          onExport: (_) async => true,
+          onImport: () {
+            importCalls++;
+            return imported.future;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importar'));
+    await tester.pump();
+    expect(importCalls, 1);
+    expect(
+      tester.widget<EventCard>(find.byType(EventCard)).exportEnabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Importar'))
+          .onPressed,
+      isNull,
+    );
+    imported.complete(null);
+    await tester.pumpAndSettle();
+  });
+
+  test('maps typed document failures to actionable Portuguese', () {
+    expect(
+      eventDocumentErrorMessage(EventImportException.invalidJson),
+      contains('Arquivo inválido'),
+    );
+    expect(
+      eventDocumentErrorMessage(EventImportException.unsupportedFormat),
+      contains('Formato não reconhecido'),
+    );
+    expect(
+      eventDocumentErrorMessage(EventImportException.unsupportedVersion),
+      contains('Versão do arquivo não suportada'),
+    );
+    expect(
+      eventDocumentErrorMessage(
+        const DocumentGatewayException('picker_busy', null),
+      ),
+      contains('seletor de arquivos aberto'),
+    );
+    expect(
+      eventDocumentErrorMessage(
+        const DocumentGatewayException('io_error', null),
+      ),
+      contains('acessar o arquivo'),
+    );
   });
 }
 

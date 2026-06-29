@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../../platform/documents/document_gateway.dart';
 import '../data/event_export_codec.dart';
 import '../data/event_repository.dart';
@@ -11,7 +13,7 @@ enum EventTransferException implements Exception {
 }
 
 class EventTransferController {
-  const EventTransferController({
+  EventTransferController({
     required this.gateway,
     required this.codec,
     required this.repository,
@@ -24,6 +26,7 @@ class EventTransferController {
   final EventRepository repository;
   final String Function() newId;
   final DateTime Function() clock;
+  final Map<String, Future<void>> _relinkQueues = {};
 
   Future<bool> exportEvent(SoundTrackEvent event) {
     return gateway.createEventJson(
@@ -63,40 +66,75 @@ class EventTransferController {
     SoundTrackEvent event,
     String momentId,
   ) async {
-    final authoritative = await repository.findById(event.id);
-    if (authoritative == null) {
-      throw EventTransferException.eventNotFound;
-    }
-    final index = authoritative.moments.indexWhere(
-      (moment) => moment.id == momentId,
-    );
-    if (index < 0) throw EventTransferException.momentNotFound;
     final picked = await gateway.pickAudio();
-    if (picked == null) return authoritative;
+    if (picked == null) {
+      final authoritative = await repository.findById(event.id);
+      if (authoritative == null) throw EventTransferException.eventNotFound;
+      return authoritative;
+    }
     final probe = await gateway.probeAudio(picked.uri);
     if (!probe.playable) throw EventTransferException.unplayableAudio;
-    final moment = authoritative.moments[index];
-    final updated = authoritative.updateMoment(
-      moment.copyWith(
-        audio: AudioReference(
-          uri: picked.uri,
-          displayName: picked.displayName,
-          pending: false,
-          artist: probe.artist,
-          duration: probe.duration,
+    return _enqueueRelink(event.id, () async {
+      final authoritative = await repository.findById(event.id);
+      if (authoritative == null) throw EventTransferException.eventNotFound;
+      final index = authoritative.moments.indexWhere(
+        (moment) => moment.id == momentId,
+      );
+      if (index < 0) throw EventTransferException.momentNotFound;
+      final moment = authoritative.moments[index];
+      final updated = authoritative.updateMoment(
+        moment.copyWith(
+          audio: AudioReference(
+            uri: picked.uri,
+            displayName: picked.displayName,
+            pending: false,
+            artist: probe.artist,
+            duration: probe.duration,
+          ),
         ),
-      ),
+      );
+      await repository.save(updated);
+      return updated;
+    });
+  }
+
+  Future<T> _enqueueRelink<T>(String eventId, Future<T> Function() operation) {
+    final result = Completer<T>();
+    final previous = _relinkQueues[eventId] ?? Future<void>.value();
+    late final Future<void> tail;
+    tail = previous.then<void>(
+      (_) async {
+        try {
+          result.complete(await operation());
+        } catch (error, stackTrace) {
+          result.completeError(error, stackTrace);
+        }
+      },
+      onError: (_) async {
+        try {
+          result.complete(await operation());
+        } catch (error, stackTrace) {
+          result.completeError(error, stackTrace);
+        }
+      },
     );
-    await repository.save(updated);
-    return updated;
+    _relinkQueues[eventId] = tail;
+    tail.whenComplete(() {
+      if (identical(_relinkQueues[eventId], tail)) {
+        _relinkQueues.remove(eventId);
+      }
+    });
+    return result.future;
   }
 
   static String _safeName(String name) {
-    final stem = name
+    var stem = name
         .trim()
+        .replaceFirst(RegExp(r'\.soundtrack\.json$', caseSensitive: false), '')
         .replaceAll(RegExp(r'[^A-Za-z0-9À-ÿ._-]+'), '-')
         .replaceAll(RegExp(r'-+'), '-')
         .replaceAll(RegExp(r'^[-.]+|[-.]+$'), '');
+    if (stem.length > 80) stem = stem.substring(0, 80);
     return '${stem.isEmpty ? 'evento' : stem}.soundtrack.json';
   }
 }

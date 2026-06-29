@@ -24,6 +24,18 @@ void main() {
     },
   );
 
+  test('export bounds name and does not duplicate its extension', () async {
+    final gateway = _Gateway();
+    await _controller(gateway: gateway).exportEvent(
+      _event(name: '${List.filled(120, 'A').join()}.soundtrack.json'),
+    );
+    expect(
+      gateway.suggestedName!.endsWith('.soundtrack.json.soundtrack.json'),
+      isFalse,
+    );
+    expect(gateway.suggestedName!.length, lessThanOrEqualTo(96));
+  });
+
   test('import cancellation does not save', () async {
     final repository = _CountingRepository();
     final result = await _controller(
@@ -146,6 +158,47 @@ void main() {
     expect(audio.artist, 'Artist');
     expect(repository.saveCount, 0);
   });
+
+  test('simultaneous relinks preserve both authoritative merges', () async {
+    final original = _event().copyWith(
+      moments: [
+        _event().moments.single,
+        _event().moments.single.copyWith(id: 'm2', name: 'Second'),
+      ],
+    );
+    final repository = _CountingRepository([original]);
+    final gateway = _QueuedGateway([
+      const PickedDocument(uri: 'first', displayName: 'first.mp3'),
+      const PickedDocument(uri: 'second', displayName: 'second.mp3'),
+    ]);
+    final controller = _controller(gateway: gateway, repository: repository);
+    await Future.wait([
+      controller.relinkMoment(original, 'm1'),
+      controller.relinkMoment(original, 'm2'),
+    ]);
+    final saved = await repository.findById(original.id);
+    expect(saved!.moments[0].audio!.uri, 'first');
+    expect(saved.moments[1].audio!.uri, 'second');
+  });
+
+  test('relink queue continues after a save error', () async {
+    final repository = _CountingRepository([_event()])
+      ..saveError = StateError('disk');
+    final controller = _controller(
+      gateway: _QueuedGateway([
+        const PickedDocument(uri: 'first', displayName: 'first.mp3'),
+        const PickedDocument(uri: 'second', displayName: 'second.mp3'),
+      ]),
+      repository: repository,
+    );
+    await expectLater(
+      controller.relinkMoment(_event(), 'm1'),
+      throwsStateError,
+    );
+    repository.saveError = null;
+    final result = await controller.relinkMoment(_event(), 'm1');
+    expect(result.moments.single.audio!.uri, 'second');
+  });
 }
 
 EventTransferController _controller({
@@ -228,4 +281,16 @@ class _Gateway implements DocumentGateway {
     if (probeError case final error?) throw error;
     return probe;
   }
+}
+
+class _QueuedGateway extends _Gateway {
+  _QueuedGateway(this._documents);
+  final List<PickedDocument> _documents;
+
+  @override
+  Future<PickedDocument?> pickAudio() async => _documents.removeAt(0);
+
+  @override
+  Future<AudioProbeResult> probeAudio(String uri) async =>
+      const AudioProbeResult(playable: true);
 }

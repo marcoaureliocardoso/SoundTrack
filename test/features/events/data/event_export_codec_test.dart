@@ -220,6 +220,84 @@ void main() {
     expect(inaccessible.moments.single.audio!.pending, isTrue);
     expect(unplayable.moments.single.audio!.pending, isTrue);
   });
+
+  test(
+    'rejects duplicate, missing and inconsistent canonical sources',
+    () async {
+      final encoded =
+          jsonDecode(codec.encode(event, DateTime.utc(2026)))
+              as Map<String, Object?>;
+      final source = Map<String, Object?>.from(
+        (encoded['audioSources']! as List).single as Map,
+      );
+      final invalidLists = <List<Object?>>[
+        [source, source],
+        [],
+        [
+          {...source, 'displayName': 'different.mp3'},
+        ],
+        [
+          {...source, 'uri': 'content://other'},
+        ],
+      ];
+      for (final sources in invalidLists) {
+        final value = {...encoded, 'audioSources': sources};
+        var calls = 0;
+        await expectLater(
+          codec.decode(
+            jsonEncode(value),
+            replacementId: 'new',
+            canRead: (_) async {
+              calls++;
+              return true;
+            },
+            probeAudio: (_) async {
+              calls++;
+              return const AudioProbeResult(playable: true);
+            },
+          ),
+          throwsA(EventImportException.invalidJson),
+        );
+        expect(calls, 0);
+      }
+    },
+  );
+
+  test(
+    'probes a shared URI once and applies canonical result to all moments',
+    () async {
+      final shared = event.copyWith(
+        moments: [
+          event.moments.single,
+          event.moments.single.copyWith(id: 'm2'),
+        ],
+      );
+      var reads = 0;
+      var probes = 0;
+      final imported = await codec.decode(
+        codec.encode(shared, DateTime.utc(2026)),
+        replacementId: 'new',
+        canRead: (_) async {
+          reads++;
+          return true;
+        },
+        probeAudio: (_) async {
+          probes++;
+          return const AudioProbeResult(
+            playable: true,
+            artist: 'Canonical probe',
+            duration: Duration(seconds: 42),
+          );
+        },
+      );
+      expect(reads, 1);
+      expect(probes, 1);
+      expect(
+        imported.moments.map((moment) => moment.audio!.artist),
+        everyElement('Canonical probe'),
+      );
+    },
+  );
 }
 
 Future<SoundTrackEvent> _decode(

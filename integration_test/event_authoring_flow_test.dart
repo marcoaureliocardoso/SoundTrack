@@ -1,91 +1,75 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:soundtrack/features/events/application/event_editor_controller.dart';
-import 'package:soundtrack/features/events/application/event_library_controller.dart';
-import 'package:soundtrack/features/events/application/event_transfer_controller.dart';
-import 'package:soundtrack/features/events/data/event_export_codec.dart';
-import 'package:soundtrack/features/events/domain/audio_reference.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:soundtrack/app/app_dependencies.dart';
+import 'package:soundtrack/app/soundtrack_app.dart';
+import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
+import 'package:soundtrack/features/events/presentation/event_library_page.dart';
+import 'package:soundtrack/features/events/presentation/widgets/event_card.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
 import '../test/support/in_memory_event_repository.dart';
 
 void main() {
-  test(
-    'create moments, export, import and relink with fake documents',
-    () async {
-      final repository = InMemoryEventRepository();
-      var eventSequence = 0;
-      final library = EventLibraryController(
-        repository: repository,
-        newId: () => 'event-${++eventSequence}',
-      );
-      final created = await library.create('Casamento');
-      var momentSequence = 0;
-      final editor = EventEditorController(
-        repository: repository,
-        initial: created,
-        newId: () => 'moment-${++momentSequence}',
-      );
-      editor.addMoment('Entrada');
-      editor.updateMoment(
-        editor.draft.moments.single.copyWith(
-          audio: const AudioReference(
-            uri: 'content://original',
-            displayName: 'entrada.mp3',
-            pending: false,
-            artist: 'Band',
-            duration: Duration(minutes: 3),
-          ),
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('creates, exports, imports and relinks through composed UI', (
+    tester,
+  ) async {
+    final gateway = _FlowGateway();
+    var eventId = 0;
+    var momentId = 0;
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository(),
+          newEventId: () => 'event-${++eventId}',
+          newMomentId: () => 'moment-${++momentId}',
+          documentGateway: gateway,
+          clock: () => DateTime.utc(2026, 6, 29),
         ),
-      );
-      editor.addMoment('Sem arquivo');
-      await editor.save();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final gateway = _FlowGateway();
-      final transfer = EventTransferController(
-        gateway: gateway,
-        codec: const EventExportCodec(),
-        repository: repository,
-        newId: () => 'event-${++eventSequence}',
-        clock: () => DateTime.utc(2026, 6, 29),
-      );
-      expect(await transfer.exportEvent(editor.draft), isTrue);
+    await tester.tap(find.byKey(addEventKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(eventNameFieldKey), 'Casamento');
+    await tester.tap(find.text('Criar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(EventCard));
+    await tester.pumpAndSettle();
 
-      gateway.openedContents = gateway.exportedContents;
-      final imported = await transfer.importEvent();
-      expect(imported!.id, 'event-2');
-      expect(imported.moments[0].audio!.pending, isTrue);
-      expect(imported.moments[1].audioPending, isTrue);
-      expect(imported.moments[1].audio, isNull);
+    await tester.tap(find.byKey(addMomentKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
+    await tester.tap(find.text('Adicionar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.save));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
-      gateway.picked = const PickedDocument(
-        uri: 'content://replacement',
-        displayName: 'entrada-local.mp3',
-      );
-      gateway.probe = const AudioProbeResult(
-        playable: true,
-        artist: 'Local Band',
-        duration: Duration(minutes: 4),
-      );
-      final relinked = await transfer.relinkMoment(imported, 'moment-1');
-      final relinkedWithoutReference = await transfer.relinkMoment(
-        relinked,
-        'moment-2',
-      );
-      expect(relinkedWithoutReference.moments[0].audio!.pending, isFalse);
-      expect(relinkedWithoutReference.moments[0].audio!.artist, 'Local Band');
-      expect(
-        relinkedWithoutReference.moments[1].audio!.uri,
-        'content://replacement',
-      );
-    },
-  );
+    await tester.tap(find.byType(PopupMenuButton<EventCardAction>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exportar'));
+    await tester.pumpAndSettle();
+    expect(gateway.exportedContents, isNotNull);
+
+    await tester.tap(find.text('Importar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Localizar músicas'), findsOneWidget);
+    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+
+    await tester.tap(find.text('Escolher música'));
+    await tester.pumpAndSettle();
+    expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
+    expect(find.text('Concluir'), findsOneWidget);
+  });
 }
 
 class _FlowGateway implements DocumentGateway {
   String? exportedContents;
-  String? openedContents;
-  PickedDocument? picked;
-  AudioProbeResult probe = const AudioProbeResult(playable: false);
 
   @override
   Future<bool> createEventJson({
@@ -97,14 +81,22 @@ class _FlowGateway implements DocumentGateway {
   }
 
   @override
-  Future<String?> openEventJson() async => openedContents;
+  Future<String?> openEventJson() async => exportedContents;
 
   @override
   Future<bool> canRead(String uri) async => false;
 
   @override
-  Future<PickedDocument?> pickAudio() async => picked;
+  Future<PickedDocument?> pickAudio() async => const PickedDocument(
+    uri: 'content://replacement',
+    displayName: 'entrada.mp3',
+  );
 
   @override
-  Future<AudioProbeResult> probeAudio(String uri) async => probe;
+  Future<AudioProbeResult> probeAudio(String uri) async =>
+      const AudioProbeResult(
+        playable: true,
+        artist: 'Local Band',
+        duration: Duration(minutes: 4),
+      );
 }

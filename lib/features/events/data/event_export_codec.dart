@@ -54,6 +54,7 @@ class EventExportCodec {
     }
 
     final SoundTrackEvent imported;
+    final Map<String, _CanonicalAudioSource> sources;
     try {
       final audioSources = root['audioSources'];
       if (root['exportedAt'] is! String ||
@@ -63,15 +64,55 @@ class EventExportCodec {
           audioSources.any((source) => !_validAudioSource(source))) {
         throw const FormatException();
       }
+      sources = {};
+      for (final value in audioSources) {
+        final source = _CanonicalAudioSource.fromJson(
+          Map<String, Object?>.from(value as Map),
+        );
+        if (sources.containsKey(source.uri)) throw const FormatException();
+        sources[source.uri] = source;
+      }
       imported = SoundTrackEvent.fromJson(
         Map<String, Object?>.from(root['event']! as Map),
         imported: true,
         replacementId: replacementId,
       );
+      final referencedUris = <String>{};
+      for (final moment in imported.moments) {
+        final audio = moment.audio;
+        final uri = audio?.uri;
+        if (audio == null || uri == null || uri.isEmpty) continue;
+        referencedUris.add(uri);
+        final source = sources[uri];
+        if (source == null || !source.matches(audio)) {
+          throw const FormatException();
+        }
+      }
+      if (referencedUris.length != sources.length) {
+        throw const FormatException();
+      }
     } catch (_) {
       throw EventImportException.invalidJson;
     }
 
+    final resolved = <String, AudioReference?>{};
+    for (final entry in sources.entries) {
+      final source = entry.value;
+      if (!await canRead(entry.key)) {
+        resolved[entry.key] = null;
+        continue;
+      }
+      final probe = await probeAudio(entry.key);
+      resolved[entry.key] = probe.playable
+          ? AudioReference(
+              uri: entry.key,
+              displayName: source.displayName,
+              pending: false,
+              artist: probe.artist ?? source.artist,
+              duration: probe.duration ?? source.duration,
+            )
+          : null;
+    }
     final moments = <EventMoment>[];
     for (final moment in imported.moments) {
       final audio = moment.audio;
@@ -79,24 +120,9 @@ class EventExportCodec {
         moments.add(moment);
         continue;
       }
-      final uri = audio.uri!;
-      if (!await canRead(uri)) {
-        moments.add(moment);
-        continue;
-      }
-      final probe = await probeAudio(uri);
+      final canonical = resolved[audio.uri!];
       moments.add(
-        probe.playable
-            ? moment.copyWith(
-                audio: AudioReference(
-                  uri: uri,
-                  displayName: audio.displayName,
-                  pending: false,
-                  artist: probe.artist ?? audio.artist,
-                  duration: probe.duration ?? audio.duration,
-                ),
-              )
-            : moment,
+        canonical == null ? moment : moment.copyWith(audio: canonical),
       );
     }
     return imported.copyWith(moments: moments);
@@ -120,5 +146,37 @@ class EventExportCodec {
     } catch (_) {
       return false;
     }
+  }
+}
+
+class _CanonicalAudioSource {
+  const _CanonicalAudioSource({
+    required this.uri,
+    required this.displayName,
+    required this.artist,
+    required this.duration,
+  });
+
+  factory _CanonicalAudioSource.fromJson(Map<String, Object?> json) {
+    return _CanonicalAudioSource(
+      uri: json['uri']! as String,
+      displayName: json['displayName']! as String,
+      artist: json['artist'] as String?,
+      duration: json['durationMs'] == null
+          ? null
+          : Duration(milliseconds: json['durationMs']! as int),
+    );
+  }
+
+  final String uri;
+  final String displayName;
+  final String? artist;
+  final Duration? duration;
+
+  bool matches(AudioReference audio) {
+    return audio.uri == uri &&
+        audio.displayName == displayName &&
+        audio.artist == artist &&
+        audio.duration == duration;
   }
 }
