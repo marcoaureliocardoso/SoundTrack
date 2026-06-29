@@ -5,9 +5,14 @@ import '../domain/soundtrack_event.dart';
 import 'event_repository.dart';
 
 class JsonFileEventRepository implements EventRepository {
-  JsonFileEventRepository(this.directory);
+  JsonFileEventRepository(
+    this.directory, {
+    Future<File> Function(File temporaryFile, String destinationPath)? promote,
+  }) : _promote = promote ?? _rename;
 
   final Directory directory;
+  final Future<File> Function(File temporaryFile, String destinationPath)
+  _promote;
 
   File get _file =>
       File('${directory.path}${Platform.pathSeparator}events.json');
@@ -67,10 +72,10 @@ class JsonFileEventRepository implements EventRepository {
       'events': events.values.map((event) => event.toJson()).toList(),
     });
     await _temporaryFile.writeAsString(json, flush: true);
+    await _promote(_temporaryFile, _file.path);
+  }
 
-    if (await _file.exists()) {
-      await _file.delete();
-    }
-    await _temporaryFile.rename(_file.path);
+  static Future<File> _rename(File temporaryFile, String destinationPath) {
+    return temporaryFile.rename(destinationPath);
   }
 }

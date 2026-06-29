@@ -38,27 +38,61 @@ void main() {
     expect(events.map((event) => event.id), ['b']);
   });
 
-  test('replaces an event by id and writes the versioned envelope', () async {
-    await repository.save(_event(id: 'a', name: 'Original'));
-    await repository.save(_event(id: 'a', name: 'Atualizado'));
+  test(
+    'updates an existing events.json and writes the versioned envelope',
+    () async {
+      await repository.save(_event(id: 'a', name: 'Original'));
+      await repository.save(_event(id: 'a', name: 'Atualizado'));
 
-    final envelope =
+      final envelope =
+          jsonDecode(
+                await File(
+                  '${directory.path}${Platform.pathSeparator}events.json',
+                ).readAsString(),
+              )
+              as Map<String, Object?>;
+      final events = envelope['events'] as List<Object?>;
+
+      expect(envelope['schemaVersion'], 1);
+      expect(events, hasLength(1));
+      expect((events.single as Map<String, Object?>)['name'], 'Atualizado');
+      expect(
+        File(
+          '${directory.path}${Platform.pathSeparator}events.json.tmp',
+        ).existsSync(),
+        isFalse,
+      );
+    },
+  );
+
+  test('preserves the existing events.json when promotion fails', () async {
+    await repository.save(_event(id: 'a', name: 'Original'));
+    final failingRepository = JsonFileEventRepository(
+      directory,
+      promote: (temporaryFile, destinationPath) async {
+        throw FileSystemException('Promotion failed.', temporaryFile.path);
+      },
+    );
+
+    await expectLater(
+      failingRepository.save(_event(id: 'a', name: 'Atualizado')),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    final restored = await JsonFileEventRepository(directory).findById('a');
+    final temporaryEnvelope =
         jsonDecode(
               await File(
-                '${directory.path}${Platform.pathSeparator}events.json',
+                '${directory.path}${Platform.pathSeparator}events.json.tmp',
               ).readAsString(),
             )
             as Map<String, Object?>;
-    final events = envelope['events'] as List<Object?>;
+    final temporaryEvents = temporaryEnvelope['events'] as List<Object?>;
 
-    expect(envelope['schemaVersion'], 1);
-    expect(events, hasLength(1));
-    expect((events.single as Map<String, Object?>)['name'], 'Atualizado');
+    expect(restored?.name, 'Original');
     expect(
-      File(
-        '${directory.path}${Platform.pathSeparator}events.json.tmp',
-      ).existsSync(),
-      isFalse,
+      (temporaryEvents.single as Map<String, Object?>)['name'],
+      'Atualizado',
     );
   });
 
