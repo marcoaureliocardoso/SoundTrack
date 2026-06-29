@@ -26,6 +26,8 @@ O princípio central é **continuidade primeiro**: durante o evento, o aplicativ
 - Funcionar integralmente offline.
 - Verificar arquivos e condições básicas antes de entrar no Modo Evento.
 - Manter a música atual quando a próxima faixa não puder ser preparada.
+- Permitir alternar livremente para outros aplicativos sem encerrar o Modo Evento ou interromper voluntariamente o áudio.
+- Exportar a configuração de um evento como arquivo JSON legível e versionado.
 
 ## 3. Fora do escopo inicial
 
@@ -37,6 +39,8 @@ O princípio central é **continuidade primeiro**: durante o evento, o aplicativ
 - Gravação de narração ou áudio do evento.
 - Edição destrutiva dos arquivos de música.
 - Automação da linha do tempo por horário ou duração.
+- Importação de eventos exportados.
+- Exportação em XML ou formatos adicionais.
 
 A normalização permanece como evolução futura. O MVP oferece ajuste manual de ganho por momento.
 
@@ -50,6 +54,7 @@ Tela inicial com ações para:
 - abrir evento;
 - duplicar evento;
 - renomear evento;
+- exportar evento;
 - excluir evento mediante confirmação.
 
 Cada evento exibe nome, quantidade de momentos, estado da última verificação e data de alteração.
@@ -85,7 +90,7 @@ O app recomenda ativar “Não perturbe”, conectar o carregador e confirmar a 
 
 ### 4.4 Modo Evento
 
-O Modo Evento bloqueia alterações estruturais e mantém a tela ativa. Sair exige confirmação.
+O Modo Evento bloqueia alterações estruturais e mantém a tela ativa enquanto o SoundTrack estiver visível. Sair exige confirmação.
 
 O Dashboard usa uma linha do tempo vertical com botões largos. A ordem e o número do momento permanecem visíveis. O nó atual tem indicação textual e visual; cor nunca é o único indicador.
 
@@ -103,6 +108,37 @@ Os botões dos momentos usam ícone de reprodução, borda e texto que indicam a
 Os comandos de Pausar, Parar e Narração ficam separados da linha do tempo. Parar exige confirmação ou gesto protegido; Pausar é imediatamente reversível.
 
 Os três controles de volume — Master, Música e Narração — ficam disponíveis numa área de emergência expansível. Alterações feitas ali valem para a sessão atual e não sobrescrevem as predefinições sem uma ação explícita de salvar. Uma ação restaura os valores predefinidos.
+
+### 4.5 Alternância entre aplicativos
+
+O Modo Evento não usa modo quiosque, não bloqueia os comandos de navegação do Android e não impede o usuário de abrir WhatsApp, câmera ou qualquer outro aplicativo.
+
+Ao colocar o SoundTrack em segundo plano:
+
+- a reprodução e as transições já iniciadas continuam;
+- o Modo Evento permanece ativo;
+- momento, posição, volumes temporários e Narração são preservados;
+- uma notificação persistente informa que o evento continua em execução e oferece uma ação para retornar ao Dashboard;
+- ao voltar, o Dashboard reaparece no mesmo estado, sem reiniciar a música.
+
+Se o Android encerrar o processo por falta de recursos, o app não pode garantir reprodução contínua. O serviço de áudio em primeiro plano reduz essa possibilidade, e a interface deve explicar claramente uma eventual recuperação.
+
+### 4.6 Exportação do evento
+
+Fora do Modo Evento, o usuário pode exportar um evento para um arquivo UTF-8 com extensão `.soundtrack.json`.
+
+O arquivo contém:
+
+- identificador do formato e versão do esquema;
+- data da exportação;
+- nome e configurações globais do evento;
+- ordem e configuração de todos os momentos;
+- metadados exibidos das músicas;
+- referências locais do Android, explicitamente marcadas como dependentes do dispositivo.
+
+O arquivo não contém os bytes das músicas e não é um pacote portátil de áudio. Uma referência pode deixar de funcionar após mover o arquivo, revogar a permissão, reinstalar o app ou usar outro dispositivo. A exportação serve para inspeção, integração futura e preservação da configuração; a importação e o religamento assistido das músicas ficam fora do MVP.
+
+O esquema usa JSON por ser simples, amplamente suportado e fácil de versionar. XML e formatos adicionais não serão oferecidos no primeiro lançamento.
 
 ## 5. Modelo de dados
 
@@ -161,6 +197,18 @@ Estado transitório do Modo Evento:
 - alertas não bloqueantes.
 
 O estado da sessão não altera as predefinições do evento automaticamente.
+
+### EventExport
+
+Envelope textual do arquivo exportado:
+
+- `format`: valor fixo `soundtrack-event`;
+- `schemaVersion`: inteiro iniciado em `1`;
+- `exportedAt`: data e hora em ISO 8601;
+- `event`: configuração serializada do evento;
+- `audioSources`: referências locais e metadados, cada uma marcada com `portable: false`.
+
+Campos futuros devem ser opcionais ou acompanhados por incremento de `schemaVersion`. Dados transitórios de `SessionState` não são exportados.
 
 ## 6. Regras de áudio
 
@@ -221,6 +269,7 @@ Somente Pausar, Parar ou sair do Modo Evento interrompem voluntariamente a repro
 - Em ligação ou perda de foco de áudio, o app tenta manter a reprodução. Quando o Android impuser uma interrupção, o app preserva posição e estado e retoma automaticamente assim que o sistema permitir.
 - Alertas de rota ou foco não bloqueiam os controles do evento.
 - O app usa execução apropriada para áudio em primeiro plano e mantém o estado da sessão durante sobreposições breves.
+- Alternar para outro aplicativo não é tratado como pausa, saída ou encerramento do Modo Evento.
 
 O Android pode impor interrupções que o aplicativo não consegue evitar. O requisito é minimizar o intervalo, preservar o contexto e retomar sem ação manual.
 
@@ -260,6 +309,7 @@ A interface envia intenções e renderiza um estado imutável. Ela não controla
 - adaptação dos dois players;
 - observação de foco e rota de áudio;
 - integração para tela ativa e execução em primeiro plano.
+- serialização versionada e compartilhamento do arquivo JSON exportado.
 
 As interfaces entre essas unidades permitem substituir armazenamento ou biblioteca de áudio sem alterar as regras do produto.
 
@@ -272,6 +322,8 @@ As interfaces entre essas unidades permitem substituir armazenamento ou bibliote
 - Falha durante crossfade antes da confirmação: cancelar a faixa nova e estabilizar a atual.
 - Mudança de rota: continuar e alertar.
 - Interrupção imposta pelo Android: preservar posição e retomar automaticamente.
+- App enviado ao segundo plano: manter serviço, reprodução e estado; restaurar o mesmo Dashboard ao retornar.
+- Falha ao criar ou compartilhar exportação: não alterar o evento e informar o destino ou a permissão que falhou.
 - Estado persistente corrompido: isolar o evento afetado e manter os demais acessíveis.
 - Encerramento inesperado: salvar alterações do editor de forma atômica; a sessão ao vivo não promete retomar áudio após o processo ser morto.
 
@@ -305,6 +357,7 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - volumes temporários e restauração;
 - estados ativo, pausado, Narração e erro;
 - tamanhos mínimos de toque e acessibilidade.
+- alternância para outro app e retorno ao mesmo estado visual.
 
 ### Integração Android
 
@@ -314,6 +367,18 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - mudança entre alto-falante, cabo e Bluetooth;
 - perda e retorno de foco de áudio;
 - tela ativa e execução prolongada.
+- reprodução e transições com o app em segundo plano;
+- encerramento e recriação da interface sem reiniciar a sessão mantida pelo serviço.
+
+### Exportação
+
+- JSON válido em UTF-8;
+- esquema e versão presentes;
+- ordem e configurações preservadas;
+- referências de áudio marcadas como não portáveis;
+- ausência dos bytes das músicas;
+- falha de escrita ou compartilhamento sem modificar o evento;
+- compatibilidade de leitura estrutural por ferramentas JSON comuns.
 
 ### Validação física
 
@@ -335,5 +400,6 @@ Mensagens de erro devem dizer o que ocorreu, qual momento foi afetado e qual aç
 - O Dashboard diferencia inequivocamente informação de ação.
 - O app funciona sem rede.
 - Interrupções externas não provocam pausa voluntária e a retomada automática ocorre quando o Android a torna necessária.
+- Alternar para outro aplicativo não interrompe voluntariamente o áudio, e retornar preserva o estado do Dashboard.
+- Um evento pode ser exportado como JSON versionado sem incorporar os arquivos de música.
 - Uma sessão prolongada em aparelho físico não apresenta vazamentos progressivos, perda de comandos ou degradação das transições.
-
