@@ -1,6 +1,7 @@
 .superpowers/
 .worktrees/
 .dart_tool/
+.flutter-plugins-dependencies
 .idea/
 .vscode/
 build/
