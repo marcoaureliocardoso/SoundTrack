@@ -11,6 +11,7 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
 
 data class DocumentMetadata(
     val uri: String,
@@ -61,58 +62,57 @@ class DocumentChannel(
 ) : MethodChannel.MethodCallHandler {
     private val resolver: ContentResolver = activity.contentResolver
     private val channel = MethodChannel(messenger, CHANNEL_NAME)
+    private val ioRunner =
+        DocumentIoRunner(
+            executor = Executors.newSingleThreadExecutor(),
+            postToMain = { action -> activity.runOnUiThread(Runnable(action)) },
+        )
     private var pending: PendingOperation? = null
+    private var disposed = false
 
     private val audioPicker =
         activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            val operation = takePending<PendingOperation.PickAudio>() ?: return@registerForActivityResult
+            val operation = pendingAs<PendingOperation.PickAudio>() ?: return@registerForActivityResult
             if (uri == null) {
-                operation.result.success(null)
+                completePending(operation, null)
                 return@registerForActivityResult
             }
-            try {
+            runPendingIo(operation, "pick_failed") {
                 resolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
-                operation.result.success(readDocumentMetadata(uri).toChannelMap())
-            } catch (error: Exception) {
-                operation.result.error("pick_failed", error.message, null)
+                readDocumentMetadata(uri).toChannelMap()
             }
         }
 
     private val eventPicker =
         activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            val operation = takePending<PendingOperation.OpenEvent>() ?: return@registerForActivityResult
+            val operation = pendingAs<PendingOperation.OpenEvent>() ?: return@registerForActivityResult
             if (uri == null) {
-                operation.result.success(null)
+                completePending(operation, null)
                 return@registerForActivityResult
             }
-            try {
-                val contents =
-                    resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
-                        it.readText()
-                    } ?: throw IllegalStateException("Unable to open selected document")
-                operation.result.success(contents)
-            } catch (error: Exception) {
-                operation.result.error("read_failed", error.message, null)
+            runPendingIo(operation, "read_failed") {
+                val declaredSize = querySize(uri)
+                resolver.openInputStream(uri)?.use {
+                    BoundedUtf8Reader.read(it, declaredSize)
+                } ?: throw IllegalStateException("Unable to open selected document")
             }
         }
 
     private val eventCreator =
         activity.registerForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIME)) { uri ->
-            val operation = takePending<PendingOperation.CreateEvent>() ?: return@registerForActivityResult
+            val operation = pendingAs<PendingOperation.CreateEvent>() ?: return@registerForActivityResult
             if (uri == null) {
-                operation.result.success(false)
+                completePending(operation, false)
                 return@registerForActivityResult
             }
-            try {
+            runPendingIo(operation, "write_failed") {
                 resolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use {
                     it.write(operation.contents)
                 } ?: throw IllegalStateException("Unable to create selected document")
-                operation.result.success(true)
-            } catch (error: Exception) {
-                operation.result.error("write_failed", error.message, null)
+                true
             }
         }
 
@@ -134,13 +134,20 @@ class DocumentChannel(
                     eventPicker.launch(JSON_TYPES)
                 }
             "createEventJson" -> createEvent(call, result)
-            "canRead" -> result.success(canRead(requireUri(call)))
-            "probeAudio" -> result.success(probeAudio(requireUri(call)).toChannelMap())
+            "canRead" -> runDetachedIo(result) { canRead(requireUri(call)) }
+            "probeAudio" ->
+                runDetachedIo(result) {
+                    probeAudio(requireUri(call)).toChannelMap()
+                }
             else -> result.notImplemented()
         }
     }
 
     fun dispose() {
+        if (disposed) {
+            return
+        }
+        disposed = true
         channel.setMethodCallHandler(null)
         when (val operation = pending.also { pending = null }) {
             is PendingOperation.CreateEvent -> operation.result.success(false)
@@ -149,6 +156,7 @@ class DocumentChannel(
             -> operation.result.success(null)
             null -> Unit
         }
+        ioRunner.close()
     }
 
     private fun createEvent(
@@ -186,13 +194,59 @@ class DocumentChannel(
         }
     }
 
-    private inline fun <reified T : PendingOperation> takePending(): T? {
-        val operation = pending
-        if (operation !is T) {
-            return null
+    private fun <T> runPendingIo(
+        operation: PendingOperation,
+        errorCode: String,
+        task: () -> T,
+    ) {
+        ioRunner.run(task) { outcome ->
+            if (pending !== operation || disposed) {
+                return@run
+            }
+            outcome.fold(
+                onSuccess = { completePending(operation, it) },
+                onFailure = { error ->
+                    pending = null
+                    operation.result.error(
+                        documentIoErrorCode(error, errorCode),
+                        error.message,
+                        null,
+                    )
+                },
+            )
+        }
+    }
+
+    private fun <T> runDetachedIo(
+        result: MethodChannel.Result,
+        task: () -> T,
+    ) {
+        ioRunner.run(task) { outcome ->
+            if (disposed) {
+                return@run
+            }
+            outcome.fold(
+                onSuccess = result::success,
+                onFailure = { error ->
+                    result.error("document_io_failed", error.message, null)
+                },
+            )
+        }
+    }
+
+    private fun completePending(
+        operation: PendingOperation,
+        value: Any?,
+    ) {
+        if (pending !== operation || disposed) {
+            return
         }
         pending = null
-        return operation
+        operation.result.success(value)
+    }
+
+    private inline fun <reified T : PendingOperation> pendingAs(): T? {
+        return pending as? T
     }
 
     private fun requireUri(call: MethodCall): Uri {
@@ -223,6 +277,21 @@ class DocumentChannel(
             mimeType = resolver.getType(uri),
             size = size,
         )
+    }
+
+    private fun querySize(uri: Uri): Long? {
+        resolver.query(
+            uri,
+            arrayOf(OpenableColumns.SIZE),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.longOrNull(OpenableColumns.SIZE)?.takeIf { it >= 0 }
+            }
+        }
+        return null
     }
 
     private fun canRead(uri: Uri): Boolean {
