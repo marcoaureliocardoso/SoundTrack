@@ -180,9 +180,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       }
       await widget.controller.load();
       if (!mounted) return;
-      final hasPending = imported.moments.any(
-        (moment) => moment.audio?.pending ?? false,
-      );
+      final hasPending = imported.moments.any((moment) => moment.audioPending);
       if (hasPending && widget.transferController != null) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute(

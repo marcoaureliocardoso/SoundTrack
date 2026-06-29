@@ -19,10 +19,11 @@ void main() {
         newId: () => 'event-${++eventSequence}',
       );
       final created = await library.create('Casamento');
+      var momentSequence = 0;
       final editor = EventEditorController(
         repository: repository,
         initial: created,
-        newId: () => 'moment-1',
+        newId: () => 'moment-${++momentSequence}',
       );
       editor.addMoment('Entrada');
       editor.updateMoment(
@@ -36,6 +37,7 @@ void main() {
           ),
         ),
       );
+      editor.addMoment('Sem arquivo');
       await editor.save();
 
       final gateway = _FlowGateway();
@@ -51,7 +53,9 @@ void main() {
       gateway.openedContents = gateway.exportedContents;
       final imported = await transfer.importEvent();
       expect(imported!.id, 'event-2');
-      expect(imported.moments.single.audio!.pending, isTrue);
+      expect(imported.moments[0].audio!.pending, isTrue);
+      expect(imported.moments[1].audioPending, isTrue);
+      expect(imported.moments[1].audio, isNull);
 
       gateway.picked = const PickedDocument(
         uri: 'content://replacement',
@@ -63,10 +67,14 @@ void main() {
         duration: Duration(minutes: 4),
       );
       final relinked = await transfer.relinkMoment(imported, 'moment-1');
-      expect(relinked.moments.single.audio!.pending, isFalse);
-      expect(relinked.moments.single.audio!.artist, 'Local Band');
+      final relinkedWithoutReference = await transfer.relinkMoment(
+        relinked,
+        'moment-2',
+      );
+      expect(relinkedWithoutReference.moments[0].audio!.pending, isFalse);
+      expect(relinkedWithoutReference.moments[0].audio!.artist, 'Local Band');
       expect(
-        (await repository.findById('event-2'))!.moments.single.audio!.uri,
+        relinkedWithoutReference.moments[1].audio!.uri,
         'content://replacement',
       );
     },

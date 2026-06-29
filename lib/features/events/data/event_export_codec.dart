@@ -38,7 +38,11 @@ class EventExportCodec {
       throw EventImportException.invalidJson;
     }
 
-    if (root['format'] != EventExport.format) {
+    final format = root['format'];
+    if (format is! String) {
+      throw EventImportException.invalidJson;
+    }
+    if (format != EventExport.format) {
       throw EventImportException.unsupportedFormat;
     }
     final schemaVersion = root['schemaVersion'];
@@ -56,7 +60,7 @@ class EventExportCodec {
           DateTime.tryParse(root['exportedAt']! as String) == null ||
           root['event'] is! Map ||
           audioSources is! List ||
-          audioSources.any((source) => source is! Map)) {
+          audioSources.any((source) => !_validAudioSource(source))) {
         throw const FormatException();
       }
       imported = SoundTrackEvent.fromJson(
@@ -96,5 +100,25 @@ class EventExportCodec {
       );
     }
     return imported.copyWith(moments: moments);
+  }
+
+  bool _validAudioSource(Object? value) {
+    if (value is! Map) return false;
+    try {
+      final source = Map<String, Object?>.from(value);
+      final uri = source['uri'];
+      final displayName = source['displayName'];
+      final artist = source['artist'];
+      final durationMs = source['durationMs'];
+      return uri is String &&
+          uri.isNotEmpty &&
+          displayName is String &&
+          displayName.isNotEmpty &&
+          source['portable'] == false &&
+          (artist == null || artist is String) &&
+          (durationMs == null || (durationMs is int && durationMs >= 0));
+    } catch (_) {
+      return false;
+    }
   }
 }

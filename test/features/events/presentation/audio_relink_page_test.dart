@@ -36,9 +36,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
   });
+
+  testWidgets('lists and relinks a moment with no audio reference', (
+    tester,
+  ) async {
+    final event = _event(withoutAudio: true);
+    final repository = InMemoryEventRepository([event]);
+    final controller = EventTransferController(
+      gateway: _Gateway(),
+      codec: const EventExportCodec(),
+      repository: repository,
+      newId: () => 'new',
+      clock: DateTime.now,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AudioRelinkPage(event: event, controller: controller),
+      ),
+    );
+    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+    expect(find.text('Opening'), findsOneWidget);
+
+    await tester.tap(find.text('Escolher música'));
+    await tester.pumpAndSettle();
+    expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
+    expect((await repository.findById('e'))!.moments.single.audio!.uri, 'new');
+  });
 }
 
-SoundTrackEvent _event() => SoundTrackEvent(
+SoundTrackEvent _event({bool withoutAudio = false}) => SoundTrackEvent(
   id: 'e',
   name: 'Imported',
   createdAt: DateTime.utc(2025),
@@ -49,13 +75,15 @@ SoundTrackEvent _event() => SoundTrackEvent(
       id: 'm',
       position: 0,
       name: 'Opening',
-      audio: const AudioReference(
-        uri: 'old',
-        displayName: 'missing.mp3',
-        pending: true,
-        artist: 'Old artist',
-        duration: Duration(seconds: 10),
-      ),
+      audio: withoutAudio
+          ? null
+          : const AudioReference(
+              uri: 'old',
+              displayName: 'missing.mp3',
+              pending: true,
+              artist: 'Old artist',
+              duration: Duration(seconds: 10),
+            ),
       endBehavior: EndBehavior.loop,
       narrationEnabled: false,
       gainDb: 0,

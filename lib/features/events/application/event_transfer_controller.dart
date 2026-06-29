@@ -6,6 +6,7 @@ import '../domain/soundtrack_event.dart';
 
 enum EventTransferException implements Exception {
   unplayableAudio,
+  eventNotFound,
   momentNotFound,
 }
 
@@ -62,7 +63,10 @@ class EventTransferController {
     SoundTrackEvent event,
     String momentId,
   ) async {
-    final authoritative = await repository.findById(event.id) ?? event;
+    final authoritative = await repository.findById(event.id);
+    if (authoritative == null) {
+      throw EventTransferException.eventNotFound;
+    }
     final index = authoritative.moments.indexWhere(
       (moment) => moment.id == momentId,
     );

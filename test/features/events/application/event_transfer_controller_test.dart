@@ -92,6 +92,21 @@ void main() {
     expect(repository.saveCount, 1);
   });
 
+  test('relink rejects a missing authoritative event without saving', () async {
+    final repository = _CountingRepository();
+    final gateway = _Gateway()
+      ..picked = const PickedDocument(uri: 'fresh', displayName: 'fresh.mp3')
+      ..probe = const AudioProbeResult(playable: true);
+    await expectLater(
+      _controller(
+        gateway: gateway,
+        repository: repository,
+      ).relinkMoment(_event(), 'm1'),
+      throwsA(EventTransferException.eventNotFound),
+    );
+    expect(repository.saveCount, 0);
+  });
+
   test('cancel or unplayable relink never saves', () async {
     final repository = _CountingRepository([_event()]);
     final cancelled = await _controller(

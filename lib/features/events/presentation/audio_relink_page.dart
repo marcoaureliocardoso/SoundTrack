@@ -24,7 +24,7 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
   String? _error;
 
   List<EventMoment> get _pending =>
-      _event.moments.where((moment) => moment.audio?.pending ?? false).toList();
+      _event.moments.where((moment) => moment.audioPending).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -64,17 +64,17 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
   }
 
   Widget _pendingTile(EventMoment moment) {
-    final audio = moment.audio!;
-    final hasDetails = audio.artist != null || audio.duration != null;
+    final audio = moment.audio;
+    final hasDetails = audio?.artist != null || audio?.duration != null;
     return Card(
       child: ListTile(
-        title: Text(audio.displayName),
+        title: Text(audio?.displayName ?? 'Nenhuma música selecionada'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(moment.name),
-            if (audio.artist != null) Text(audio.artist!),
-            if (audio.duration != null) Text(_duration(audio.duration!)),
+            if (audio?.artist != null) Text(audio!.artist!),
+            if (audio?.duration != null) Text(_duration(audio!.duration!)),
           ],
         ),
         isThreeLine: hasDetails,

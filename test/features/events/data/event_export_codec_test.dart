@@ -67,6 +67,28 @@ void main() {
     );
   });
 
+  test('missing or non-string format is invalidJson', () async {
+    for (final format in <Object?>[null, 42]) {
+      final value =
+          jsonDecode(codec.encode(event, DateTime.utc(2026)))
+              as Map<String, Object?>;
+      if (format == null) {
+        value.remove('format');
+      } else {
+        value['format'] = format;
+      }
+      await expectLater(
+        codec.decode(
+          jsonEncode(value),
+          replacementId: 'new',
+          canRead: (_) async => true,
+          probeAudio: (_) async => const AudioProbeResult(playable: true),
+        ),
+        throwsA(EventImportException.invalidJson),
+      );
+    }
+  });
+
   test('schema 2 is unsupportedVersion', () async {
     await expectLater(
       _decode(codec, event, replacementId: 'new', version: 2),
@@ -93,6 +115,70 @@ void main() {
       throwsA(EventImportException.invalidJson),
     );
     expect(probes, 0);
+  });
+
+  test('rejects malformed audioSources before probing', () async {
+    final invalidSources = <Object?>[
+      'not-a-map',
+      <String, Object?>{
+        'uri': '',
+        'displayName': 'song.mp3',
+        'portable': false,
+        'artist': null,
+        'durationMs': null,
+      },
+      <String, Object?>{
+        'uri': 'content://song',
+        'displayName': '',
+        'portable': false,
+        'artist': null,
+        'durationMs': null,
+      },
+      <String, Object?>{
+        'uri': 'content://song',
+        'displayName': 'song.mp3',
+        'portable': true,
+        'artist': null,
+        'durationMs': null,
+      },
+      <String, Object?>{
+        'uri': 'content://song',
+        'displayName': 'song.mp3',
+        'portable': false,
+        'artist': 7,
+        'durationMs': null,
+      },
+      <String, Object?>{
+        'uri': 'content://song',
+        'displayName': 'song.mp3',
+        'portable': false,
+        'artist': null,
+        'durationMs': -1,
+      },
+    ];
+    for (final source in invalidSources) {
+      final value =
+          jsonDecode(codec.encode(event, DateTime.utc(2026)))
+              as Map<String, Object?>;
+      value['audioSources'] = [source];
+      var probes = 0;
+      await expectLater(
+        codec.decode(
+          jsonEncode(value),
+          replacementId: 'new',
+          canRead: (_) async {
+            probes++;
+            return true;
+          },
+          probeAudio: (_) async {
+            probes++;
+            return const AudioProbeResult(playable: true);
+          },
+        ),
+        throwsA(EventImportException.invalidJson),
+      );
+      expect(probes, 0);
+    }
   });
 
   test(
