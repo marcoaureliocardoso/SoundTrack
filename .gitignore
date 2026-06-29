@@ -1,8 +1,8 @@
 .superpowers/
+.worktrees/
 .dart_tool/
 .idea/
 .vscode/
 build/
 coverage/
 *.iml
-
