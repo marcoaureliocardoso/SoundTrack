@@ -67,13 +67,16 @@ class EventAudioAvailabilityService {
         return const _AudioAvailability.unavailable();
       }
       final probe = await probeAudio(uri);
-      return _AudioAvailability(probe: probe);
+      return _AudioAvailability.available(probe);
     } catch (_) {
-      return const _AudioAvailability.unavailable();
+      return const _AudioAvailability.unknown();
     }
   }
 
   AudioReference _apply(AudioReference audio, _AudioAvailability availability) {
+    if (!availability.known) {
+      return audio;
+    }
     final probe = availability.probe;
     if (probe == null || !probe.playable) {
       return audio.markPending();
@@ -97,9 +100,12 @@ class EventAudioAvailabilityService {
 }
 
 class _AudioAvailability {
-  const _AudioAvailability({required this.probe});
+  const _AudioAvailability.available(this.probe) : known = true;
 
-  const _AudioAvailability.unavailable() : probe = null;
+  const _AudioAvailability.unavailable() : known = true, probe = null;
 
+  const _AudioAvailability.unknown() : known = false, probe = null;
+
+  final bool known;
   final AudioProbeResult? probe;
 }

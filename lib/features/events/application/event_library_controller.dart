@@ -53,15 +53,6 @@ class EventLibraryController extends ChangeNotifier {
         if (_disposed) {
           return;
         }
-        for (var index = 0; index < events.length; index++) {
-          final event = revalidated[index];
-          if (!identical(event, events[index])) {
-            await _repository.save(event);
-          }
-        }
-        if (_disposed) {
-          return;
-        }
         _events = _ordered(revalidated);
         _error = null;
       } catch (error) {

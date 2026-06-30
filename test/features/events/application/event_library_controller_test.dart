@@ -69,7 +69,7 @@ void main() {
     });
 
     test(
-      'load persists and exposes an event changed by revalidation',
+      'load exposes but does not persist an event changed by revalidation',
       () async {
         final event = SoundTrackEvent.create(id: 'event', name: 'Evento')
             .copyWith(
@@ -109,9 +109,9 @@ void main() {
         expect(controller.events.single.moments.single.audio!.pending, isTrue);
         expect(
           (await repository.findById('event'))!.moments.single.audio!.pending,
-          isTrue,
+          isFalse,
         );
-        expect(repository.saveCalls, 1);
+        expect(repository.saveCalls, 0);
       },
     );
 

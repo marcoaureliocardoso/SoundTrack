@@ -70,7 +70,7 @@ void main() {
       },
     );
 
-    test('marks the reference pending when probing throws', () async {
+    test('preserves the event when probing throws', () async {
       final event = _eventWithAudio(_audio());
       final service = EventAudioAvailabilityService(
         canRead: (_) async => true,
@@ -79,7 +79,21 @@ void main() {
 
       final result = await service.revalidate([event]);
 
-      expect(result.single.moments.single.audio!.pending, isTrue);
+      expect(result.single, same(event));
+      expect(result.single.moments.single.audio!.pending, isFalse);
+    });
+
+    test('preserves the event when checking readability throws', () async {
+      final event = _eventWithAudio(_audio());
+      final service = EventAudioAvailabilityService(
+        canRead: (_) async => throw StateError('read failed'),
+        probeAudio: (_) async => throw StateError('must not probe'),
+      );
+
+      final result = await service.revalidate([event]);
+
+      expect(result.single, same(event));
+      expect(result.single.moments.single.audio!.pending, isFalse);
     });
 
     test('marks an unplayable readable reference as pending', () async {
@@ -133,6 +147,33 @@ void main() {
       expect(result.single, same(event));
       expect(result.single.moments.single.audio, isNull);
       expect(result.single.moments.single.audioPending, isTrue);
+    });
+
+    test('probes a shared URI once across different events', () async {
+      var canReadCalls = 0;
+      var probeCalls = 0;
+      final first = _eventWithAudio(_audio());
+      final second = SoundTrackEvent.create(id: 'second', name: 'Segundo')
+          .copyWith(
+            moments: [
+              _moment(id: 'second-moment', position: 0, audio: _audio()),
+            ],
+          );
+      final service = EventAudioAvailabilityService(
+        canRead: (_) async {
+          canReadCalls++;
+          return true;
+        },
+        probeAudio: (_) async {
+          probeCalls++;
+          return const AudioProbeResult(playable: true);
+        },
+      );
+
+      await service.revalidate([first, second]);
+
+      expect(canReadCalls, 1);
+      expect(probeCalls, 1);
     });
   });
 }
