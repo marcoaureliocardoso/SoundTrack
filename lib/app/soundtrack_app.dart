@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../features/events/application/event_library_controller.dart';
 import '../features/events/application/event_transfer_controller.dart';
 import '../features/events/presentation/event_library_page.dart';
+import '../features/playback/presentation/audio_engine_lab_page.dart';
 import 'app_dependencies.dart';
 
 class SoundTrackApp extends StatefulWidget {
@@ -33,6 +35,10 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
 
   @override
   Widget build(BuildContext context) {
+    final routes = buildSoundTrackRoutes(
+      dependencies: widget.dependencies,
+      debugMode: kDebugMode,
+    );
     return MaterialApp(
       title: 'SoundTrack',
       debugShowCheckedModeBanner: false,
@@ -43,6 +49,7 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
         ),
         useMaterial3: true,
       ),
+      routes: routes,
       home: EventLibraryPage(
         controller: _libraryController,
         createEditorController: widget.dependencies.createEditorController,
@@ -50,7 +57,27 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
         onImport: _transferController.importEvent,
         transferController: _transferController,
         onSelectAudio: _transferController.selectAudio,
+        audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)
+            ? debugAudioEngineLabRoute
+            : null,
       ),
     );
   }
+}
+
+const debugAudioEngineLabRoute = '/debug/audio-engine';
+
+Map<String, WidgetBuilder> buildSoundTrackRoutes({
+  required AppDependencies dependencies,
+  required bool debugMode,
+}) {
+  if (!debugMode) {
+    return const {};
+  }
+  return {
+    debugAudioEngineLabRoute: (_) => AudioEngineLabPage(
+      playback: dependencies.playback,
+      documents: dependencies.documentGateway,
+    ),
+  };
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
+import 'package:soundtrack/features/events/presentation/event_library_page.dart';
 
 import '../support/in_memory_event_repository.dart';
 import '../support/fake_live_playback_port.dart';
@@ -36,5 +37,24 @@ void main() {
     expect(find.text('Meus Eventos'), findsOneWidget);
     expect(find.byIcon(Icons.add), findsOneWidget);
     expect(floatingActionButton.onPressed, isNotNull);
+    expect(find.byKey(openAudioEngineLabKey), findsOneWidget);
+  });
+
+  test('release navigation does not register the audio engine lab', () {
+    final dependencies = AppDependencies(
+      eventRepository: InMemoryEventRepository(),
+      newEventId: () => 'event-1',
+      newMomentId: () => 'moment-1',
+      playback: FakeLivePlaybackPort(),
+    );
+
+    expect(
+      buildSoundTrackRoutes(dependencies: dependencies, debugMode: false),
+      isEmpty,
+    );
+    expect(
+      buildSoundTrackRoutes(dependencies: dependencies, debugMode: true),
+      contains(debugAudioEngineLabRoute),
+    );
   });
 }

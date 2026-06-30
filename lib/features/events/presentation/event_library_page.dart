@@ -18,6 +18,7 @@ typedef EventEditorControllerFactory =
     EventEditorController Function(SoundTrackEvent event);
 typedef EventExportCallback = Future<bool> Function(SoundTrackEvent event);
 typedef EventImportCallback = Future<SoundTrackEvent?> Function();
+const openAudioEngineLabKey = Key('open-audio-engine-lab');
 
 class EventLibraryPage extends StatefulWidget {
   const EventLibraryPage({
@@ -27,6 +28,7 @@ class EventLibraryPage extends StatefulWidget {
     this.onImport,
     this.transferController,
     this.onSelectAudio,
+    this.audioEngineLabRoute,
     super.key,
   });
 
@@ -36,6 +38,7 @@ class EventLibraryPage extends StatefulWidget {
   final EventImportCallback? onImport;
   final EventTransferController? transferController;
   final Future<AudioReference?> Function()? onSelectAudio;
+  final String? audioEngineLabRoute;
 
   @override
   State<EventLibraryPage> createState() => _EventLibraryPageState();
@@ -56,6 +59,14 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       appBar: AppBar(
         title: const Text('Meus Eventos'),
         actions: [
+          if (widget.audioEngineLabRoute != null)
+            IconButton(
+              key: openAudioEngineLabKey,
+              tooltip: 'Audio Engine Lab',
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(widget.audioEngineLabRoute!),
+              icon: const Icon(Icons.science),
+            ),
           if (_documentBusy)
             const Padding(
               padding: EdgeInsets.all(14),
