@@ -37,23 +37,29 @@ void main() {
       expect(backend.loopModes, [LoopMode.one, LoopMode.off]);
     });
 
-    test('clamps volume to the supported zero-to-one range', () async {
+    test('clamps finite volume and maps non-finite values to zero', () async {
       await port.setVolume(-0.25);
       await port.setVolume(0.4);
       await port.setVolume(1.25);
+      await port.setVolume(double.nan);
+      await port.setVolume(double.infinity);
+      await port.setVolume(double.negativeInfinity);
 
-      expect(backend.volumes, [0.0, 0.4, 1.0]);
+      expect(backend.volumes, [0.0, 0.4, 1.0, 0.0, 0.0, 0.0]);
     });
 
     test(
-      'converts operation failures to PlayerPortError and emits them',
+      'deduplicates the same load failure from Future and errorStream',
       () async {
         final cause = PlayerException(7, 'decoder failed', 0);
         backend.nextLoadError = cause;
-        final emitted = expectLater(port.errors, emits(isA<PlayerPortError>()));
+        final errors = <PlayerPortError>[];
+        final subscription = port.errors.listen(errors.add);
+        final load = port.load(Uri.parse('content://broken'));
+        backend.errorController.add(cause);
 
         await expectLater(
-          port.load(Uri.parse('content://broken')),
+          load,
           throwsA(
             isA<PlayerPortError>().having(
               (error) => error.cause,
@@ -62,7 +68,11 @@ void main() {
             ),
           ),
         );
-        await emitted;
+        await pumpEventQueue();
+
+        expect(errors, hasLength(1));
+        expect(errors.single.cause, same(cause));
+        await subscription.cancel();
       },
     );
 
@@ -92,12 +102,97 @@ void main() {
       expect(backend.disposeCalls, 0);
     });
 
+    test(
+      'superseding and stopping loads cancel every wrapper without errors',
+      () async {
+        final firstBackendLoad = backend.holdNextLoad();
+        final secondBackendLoad = backend.holdNextLoad();
+        final errors = <PlayerPortError>[];
+        final subscription = port.errors.listen(errors.add);
+
+        final first = port.load(Uri.parse('content://first'));
+        final firstCanceled = expectLater(
+          first,
+          throwsA(
+            isA<PlayerPortError>().having(
+              (error) => error.cause,
+              'cause',
+              isA<PlayerInterruptedException>(),
+            ),
+          ),
+        );
+        final second = port.load(Uri.parse('content://second'));
+        final secondCanceled = expectLater(
+          second,
+          throwsA(
+            isA<PlayerPortError>().having(
+              (error) => error.cause,
+              'cause',
+              isA<PlayerInterruptedException>(),
+            ),
+          ),
+        );
+
+        await port.stop();
+        await Future.wait([firstCanceled, secondCanceled]);
+        firstBackendLoad.completeError(PlayerInterruptedException('first'));
+        secondBackendLoad.completeError(PlayerInterruptedException('second'));
+        await pumpEventQueue();
+
+        expect(errors, isEmpty);
+        expect(backend.stopCalls, 1);
+        await subscription.cancel();
+      },
+    );
+
     test('dispose is final and idempotent', () async {
       await port.dispose();
       await port.dispose();
 
       expect(backend.disposeCalls, 1);
     });
+
+    test(
+      'disposing and disposed lifecycle rejects every player command',
+      () async {
+        final backendDispose = Completer<void>();
+        backend.disposeCompleter = backendDispose;
+
+        final disposing = port.dispose();
+        await pumpEventQueue();
+        expect(backend.disposeCalls, 1);
+
+        Future<void> expectCommandsRejected() async {
+          expect(() => port.play(), throwsA(isA<PlayerPortError>()));
+          await expectLater(
+            port.load(Uri.parse('content://late')),
+            throwsA(isA<PlayerPortError>()),
+          );
+          await expectLater(port.pause(), throwsA(isA<PlayerPortError>()));
+          await expectLater(port.stop(), throwsA(isA<PlayerPortError>()));
+          await expectLater(
+            port.seek(Duration.zero),
+            throwsA(isA<PlayerPortError>()),
+          );
+          await expectLater(
+            port.setVolume(0.5),
+            throwsA(isA<PlayerPortError>()),
+          );
+          await expectLater(
+            port.setLooping(true),
+            throwsA(isA<PlayerPortError>()),
+          );
+        }
+
+        await expectCommandsRejected();
+        expect(backend.commandCalls, 0);
+
+        backendDispose.complete();
+        await disposing;
+        await expectCommandsRejected();
+        expect(backend.commandCalls, 0);
+      },
+    );
 
     test(
       'play returns immediately and reports later asynchronous failure',
@@ -121,6 +216,26 @@ void main() {
 
         playCompleter.completeError(cause);
         await emitted;
+      },
+    );
+
+    test(
+      'deduplicates a play Future failure also sent by errorStream',
+      () async {
+        final playCompleter = Completer<void>();
+        backend.playCompleter = playCompleter;
+        final cause = PlayerException(11, 'play failed', 0);
+        final errors = <PlayerPortError>[];
+        final subscription = port.errors.listen(errors.add);
+
+        port.play();
+        backend.errorController.add(cause);
+        playCompleter.completeError(cause);
+        await pumpEventQueue();
+
+        expect(errors, hasLength(1));
+        expect(errors.single.cause, same(cause));
+        await subscription.cancel();
       },
     );
 
@@ -168,13 +283,32 @@ final class _FakeJustAudioBackend implements JustAudioBackend {
   final audioSources = <AudioSource>[];
   final loopModes = <LoopMode>[];
   final volumes = <double>[];
+  final _controlledLoads = <Completer<Duration?>>[];
 
   Completer<Duration?>? loadCompleter;
   Completer<void>? playCompleter;
+  Completer<void>? disposeCompleter;
   Object? nextLoadError;
   int playCalls = 0;
+  int pauseCalls = 0;
   int stopCalls = 0;
+  int seekCalls = 0;
   int disposeCalls = 0;
+
+  int get commandCalls =>
+      audioSources.length +
+      playCalls +
+      pauseCalls +
+      stopCalls +
+      seekCalls +
+      volumes.length +
+      loopModes.length;
+
+  Completer<Duration?> holdNextLoad() {
+    final completer = Completer<Duration?>();
+    _controlledLoads.add(completer);
+    return completer;
+  }
 
   @override
   Stream<Duration> get positionStream => positionController.stream;
@@ -197,6 +331,9 @@ final class _FakeJustAudioBackend implements JustAudioBackend {
     if (error != null) {
       return Future.error(error);
     }
+    if (_controlledLoads.isNotEmpty) {
+      return _controlledLoads.removeAt(0).future;
+    }
     return loadCompleter?.future ?? Future.value(null);
   }
 
@@ -207,7 +344,9 @@ final class _FakeJustAudioBackend implements JustAudioBackend {
   }
 
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    pauseCalls++;
+  }
 
   @override
   Future<void> stop() async {
@@ -215,7 +354,9 @@ final class _FakeJustAudioBackend implements JustAudioBackend {
   }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    seekCalls++;
+  }
 
   @override
   Future<void> setVolume(double volume) async {
@@ -230,6 +371,7 @@ final class _FakeJustAudioBackend implements JustAudioBackend {
   @override
   Future<void> dispose() async {
     disposeCalls++;
+    await disposeCompleter?.future;
   }
 
   Future<void> closeStreams() async {

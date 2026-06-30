@@ -40,13 +40,13 @@ final class JustAudioPlayerPort implements PlayerPort {
         }
       },
       onError: (Object error, StackTrace stackTrace) {
-        _emitError('Unable to observe playback state', error);
+        _emitAsyncError('Unable to observe playback state', error);
       },
     );
     _backendErrorSubscription = _backend.errorStream.listen(
-      (error) => _emitError('Audio player failure', error),
+      (error) => _emitAsyncError('Audio player failure', error),
       onError: (Object error, StackTrace stackTrace) {
-        _emitError('Unable to observe audio player errors', error);
+        _emitAsyncError('Unable to observe audio player errors', error);
       },
     );
   }
@@ -58,7 +58,8 @@ final class JustAudioPlayerPort implements PlayerPort {
   late final StreamSubscription<ProcessingState> _processingStateSubscription;
   late final StreamSubscription<PlayerException> _backendErrorSubscription;
 
-  Completer<void>? _loadCancellation;
+  final _activeLoads = <_LoadOperation>{};
+  final _recentAsyncErrors = <Object>{};
   Future<void>? _disposeFuture;
   bool _disposed = false;
 
@@ -88,33 +89,37 @@ final class JustAudioPlayerPort implements PlayerPort {
 
   @override
   Future<void> load(Uri source) async {
-    final cancellation = Completer<void>();
-    _loadCancellation = cancellation;
+    _ensureActive();
+    _cancelLoads('Audio load superseded by another load');
+    final operation = _LoadOperation();
+    _activeLoads.add(operation);
     final backendLoad = _backend
         .setAudioSource(AudioSource.uri(source))
         .then(
           (_) {},
           onError: (Object error, StackTrace stackTrace) {
-            if (!cancellation.isCompleted) {
-              throw _emitError('Unable to load audio source', error);
+            if (!operation.canceled) {
+              Error.throwWithStackTrace(
+                _toPlayerPortError('Unable to load audio source', error),
+                stackTrace,
+              );
             }
           },
         );
 
     try {
-      await Future.any([backendLoad, cancellation.future]);
+      await Future.any([backendLoad, operation.cancellation.future]);
     } finally {
-      if (identical(_loadCancellation, cancellation)) {
-        _loadCancellation = null;
-      }
+      _activeLoads.remove(operation);
     }
   }
 
   @override
   void play() {
+    _ensureActive();
     unawaited(
       _backend.play().catchError((Object error, StackTrace stackTrace) {
-        _emitError('Unable to play audio', error);
+        _emitAsyncError('Unable to play audio', error);
       }),
     );
   }
@@ -124,15 +129,8 @@ final class JustAudioPlayerPort implements PlayerPort {
 
   @override
   Future<void> stop() async {
-    final cancellation = _loadCancellation;
-    if (cancellation != null && !cancellation.isCompleted) {
-      cancellation.completeError(
-        _emitError(
-          'Audio load canceled by stop',
-          StateError('Audio load canceled by stop'),
-        ),
-      );
-    }
+    _ensureActive();
+    _cancelLoads('Audio load canceled by stop');
     await _run('Unable to stop audio', _backend.stop);
   }
 
@@ -144,7 +142,7 @@ final class JustAudioPlayerPort implements PlayerPort {
   Future<void> setVolume(double volume) {
     return _run(
       'Unable to set audio volume',
-      () => _backend.setVolume(volume.clamp(0.0, 1.0)),
+      () => _backend.setVolume(volume.isFinite ? volume.clamp(0.0, 1.0) : 0.0),
     );
   }
 
@@ -161,12 +159,7 @@ final class JustAudioPlayerPort implements PlayerPort {
 
   Future<void> _dispose() async {
     _disposed = true;
-    final cancellation = _loadCancellation;
-    if (cancellation != null && !cancellation.isCompleted) {
-      cancellation.completeError(
-        const PlayerPortError('Audio player disposed during load'),
-      );
-    }
+    _cancelLoads('Audio player disposed during load');
 
     Object? disposeError;
     StackTrace? disposeStackTrace;
@@ -194,21 +187,73 @@ final class JustAudioPlayerPort implements PlayerPort {
   }
 
   Future<void> _run(String message, Future<void> Function() operation) async {
+    _ensureActive();
     try {
       await operation();
     } catch (error, stackTrace) {
-      Error.throwWithStackTrace(_emitError(message, error), stackTrace);
+      Error.throwWithStackTrace(_toPlayerPortError(message, error), stackTrace);
     }
   }
 
-  PlayerPortError _emitError(String message, Object error) {
-    final typedError = error is PlayerPortError
+  void _ensureActive() {
+    if (_disposed) {
+      throw PlayerPortError(
+        'Audio player is disposing or disposed',
+        cause: StateError('Audio player is disposing or disposed'),
+      );
+    }
+  }
+
+  void _cancelLoads(String message) {
+    for (final operation in _activeLoads.toList()) {
+      operation.cancel(message);
+    }
+  }
+
+  PlayerPortError _toPlayerPortError(String message, Object error) {
+    return error is PlayerPortError
         ? error
         : PlayerPortError(message, cause: error);
-    if (!_disposed) {
-      _errorsController.add(typedError);
+  }
+
+  void _emitAsyncError(String message, Object error) {
+    if (_disposed) {
+      return;
     }
-    return typedError;
+    final key = _errorKey(error);
+    if (!_recentAsyncErrors.add(key)) {
+      return;
+    }
+    _errorsController.add(_toPlayerPortError(message, error));
+    scheduleMicrotask(() {
+      scheduleMicrotask(() => _recentAsyncErrors.remove(key));
+    });
+  }
+
+  Object _errorKey(Object error) {
+    if (error case PlayerException(
+      code: final code,
+      message: final message,
+      index: final index,
+    )) {
+      return (PlayerException, code, message, index);
+    }
+    return error;
+  }
+}
+
+final class _LoadOperation {
+  final cancellation = Completer<void>();
+  bool canceled = false;
+
+  void cancel(String message) {
+    if (canceled) {
+      return;
+    }
+    canceled = true;
+    cancellation.completeError(
+      PlayerPortError(message, cause: PlayerInterruptedException(message)),
+    );
   }
 }
 
