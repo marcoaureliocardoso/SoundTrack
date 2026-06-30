@@ -9,7 +9,9 @@ void main() {
     final port = _FakeLivePlaybackPort();
     final request = MomentPlaybackRequest(
       momentId: 'moment-1',
+      momentName: 'Opening',
       uri: Uri.parse('file:///music.mp3'),
+      audioDisplayName: 'music.mp3',
       loop: true,
       narrationEnabled: true,
       gainDb: -3,
@@ -21,7 +23,9 @@ void main() {
 
     expect(port.request, same(request));
     expect(request.momentId, 'moment-1');
+    expect(request.momentName, 'Opening');
     expect(request.uri, Uri.parse('file:///music.mp3'));
+    expect(request.audioDisplayName, 'music.mp3');
     expect(request.loop, isTrue);
     expect(request.narrationEnabled, isTrue);
     expect(request.gainDb, -3);

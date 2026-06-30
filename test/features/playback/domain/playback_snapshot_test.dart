@@ -25,4 +25,24 @@ void main() {
 
     expect(snapshot.activeMomentId, isNull);
   });
+
+  test('copyWith can clear a known duration', () {
+    const snapshot = PlaybackSnapshot(
+      phase: PlaybackPhase.paused,
+      playing: false,
+      position: Duration(seconds: 5),
+      duration: Duration(minutes: 3),
+      narrationActive: false,
+      masterVolume: 0.8,
+      musicVolume: 1,
+      narrationVolume: 0.25,
+    );
+
+    final cleared = snapshot.copyWith(
+      duration: const Duration(minutes: 4),
+      clearDuration: true,
+    );
+
+    expect(cleared.duration, isNull);
+  });
 }

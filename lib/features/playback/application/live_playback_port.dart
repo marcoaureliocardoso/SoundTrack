@@ -6,7 +6,9 @@ import '../domain/playback_snapshot.dart';
 class MomentPlaybackRequest {
   const MomentPlaybackRequest({
     required this.momentId,
+    required this.momentName,
     required this.uri,
+    required this.audioDisplayName,
     required this.loop,
     required this.narrationEnabled,
     required this.gainDb,
@@ -15,7 +17,9 @@ class MomentPlaybackRequest {
   });
 
   final String momentId;
+  final String momentName;
   final Uri uri;
+  final String audioDisplayName;
   final bool loop;
   final bool narrationEnabled;
   final double gainDb;
