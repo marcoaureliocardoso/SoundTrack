@@ -128,8 +128,27 @@ void main() {
           ),
         );
 
+        await playback.setSessionVolumes(
+          masterVolume: 0,
+          musicVolume: 1,
+          narrationVolume: 1,
+        );
+        expect(playback.snapshot.value.masterVolume, 0);
+        expect(playback.snapshot.value.musicVolume, 1);
+        expect(playback.snapshot.value.narrationVolume, 1);
+
+        await playback.setSessionVolumes(
+          masterVolume: 1,
+          musicVolume: 0,
+          narrationVolume: 0,
+        );
+        expect(playback.snapshot.value.masterVolume, 1);
+        expect(playback.snapshot.value.musicVolume, 0);
+        expect(playback.snapshot.value.narrationVolume, 0);
+
         await playback.setNarration(true);
         expect(playback.snapshot.value.narrationActive, isTrue);
+        expect(playback.snapshot.value.narrationVolume, 0);
         await playback.setNarration(false);
         expect(playback.snapshot.value.narrationActive, isFalse);
 
@@ -146,36 +165,61 @@ void main() {
 
   testWidgets('real engine survives 50 crossfades and rapid taps', (_) async {
     final playback = playbackOwner!;
-    await playback.startMoment(_request('a', audioA.uri, fade: Duration.zero));
-
-    for (var index = 0; index < 50; index++) {
-      final useA = index.isOdd;
-      await playback.startMoment(
-        _request(
-          useA ? 'a' : 'b',
-          useA ? audioA.uri : audioB.uri,
-          fade: Duration.zero,
-        ),
-      );
-      expect(playback.snapshot.value.activeMomentId, useA ? 'a' : 'b');
+    const stressFade = Duration(milliseconds: 15);
+    expect(
+      stressFade,
+      isNot(Duration.zero),
+      reason: 'stress transitions must exercise real non-zero fades',
+    );
+    final stressSnapshots = <PlaybackSnapshot>[];
+    void recordStressSnapshot() {
+      stressSnapshots.add(playback.snapshot.value);
     }
 
-    final rapidRequests = <Future<void>>[];
-    for (var index = 0; index < 12; index++) {
-      final useA = index.isEven;
-      rapidRequests.add(
-        playback.startMoment(
+    playback.snapshot.addListener(recordStressSnapshot);
+    try {
+      await playback.startMoment(_request('a', audioA.uri, fade: stressFade));
+
+      for (var index = 0; index < 50; index++) {
+        final useA = index.isOdd;
+        await playback.startMoment(
           _request(
-            useA ? 'rapid-a' : 'rapid-b',
+            useA ? 'a' : 'b',
             useA ? audioA.uri : audioB.uri,
-            fade: const Duration(milliseconds: 100),
+            fade: stressFade,
           ),
+        );
+        expect(playback.snapshot.value.activeMomentId, useA ? 'a' : 'b');
+      }
+      expect(
+        stressSnapshots.any(
+          (snapshot) => snapshot.phase == PlaybackPhase.transitioning,
         ),
+        isTrue,
       );
+      expect(playback.snapshot.value.activeMomentId, 'a');
+
+      final rapidRequests = <Future<void>>[];
+      for (var index = 0; index < 12; index++) {
+        final useA = index.isEven;
+        rapidRequests.add(
+          playback.startMoment(
+            _request(
+              useA ? 'rapid-a' : 'rapid-b',
+              useA ? audioA.uri : audioB.uri,
+              fade: const Duration(milliseconds: 100),
+            ),
+          ),
+        );
+      }
+      await Future.wait(rapidRequests);
+      await _waitUntil(
+        () => playback.snapshot.value.activeMomentId == 'rapid-b',
+      );
+      expect(playback.snapshot.value.phase, PlaybackPhase.playing);
+    } finally {
+      playback.snapshot.removeListener(recordStressSnapshot);
     }
-    await Future.wait(rapidRequests);
-    await _waitUntil(() => playback.snapshot.value.activeMomentId == 'rapid-b');
-    expect(playback.snapshot.value.phase, PlaybackPhase.playing);
   });
 }
 

@@ -28,9 +28,13 @@ Data: 2026-06-30
 - [x] Fonte inexistente preservou B ativo e emitiu `sourceFailed`.
 - [x] Fonte criada e apagada antes do load preservou B ativo e emitiu
   `sourceFailed`.
-- [x] Narração ligou e desligou no snapshot.
+- [x] `setSessionVolumes` via handler publicou exatamente os endpoints
+  Master/Música/Narração `0/1/1` e `1/0/0`.
+- [x] Narração ligou e desligou no snapshot; o endpoint ativo foi verificado
+  com volume de Narração em `0`.
 - [x] Stop terminou em `stopped`, sem momento ativo e sem playback.
-- [x] 50 crossfades consecutivos com engine real.
+- [x] 50 crossfades consecutivos com engine real, cada troca com fade-in e
+  fade-out não zero de 15 ms; foi observado `transitioning` e endpoint final A.
 - [x] 12 taps rápidos durante fades; o último pedido venceu e terminou em
   `playing`.
 - [x] Cleanup do handler, players e arquivos temporários executado em
