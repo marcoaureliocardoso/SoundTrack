@@ -1,15 +1,34 @@
 import 'package:flutter/foundation.dart';
 
-import '../../events/domain/event_moment.dart';
 import '../domain/playback_alert.dart';
 import '../domain/playback_snapshot.dart';
+
+class MomentPlaybackRequest {
+  const MomentPlaybackRequest({
+    required this.momentId,
+    required this.uri,
+    required this.loop,
+    required this.narrationEnabled,
+    required this.gainDb,
+    required this.fadeIn,
+    required this.fadeOut,
+  });
+
+  final String momentId;
+  final Uri uri;
+  final bool loop;
+  final bool narrationEnabled;
+  final double gainDb;
+  final Duration fadeIn;
+  final Duration fadeOut;
+}
 
 abstract interface class LivePlaybackPort {
   ValueListenable<PlaybackSnapshot> get snapshot;
 
   Stream<PlaybackAlert> get alerts;
 
-  Future<void> startMoment(EventMoment moment);
+  Future<void> startMoment(MomentPlaybackRequest request);
 
   Future<void> pause();
 

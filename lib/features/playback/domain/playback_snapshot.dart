@@ -10,7 +10,7 @@ class PlaybackSnapshot {
     required this.masterVolume,
     required this.musicVolume,
     required this.narrationVolume,
-    required this.activeMomentId,
+    this.activeMomentId,
   });
 
   const PlaybackSnapshot.idle()
