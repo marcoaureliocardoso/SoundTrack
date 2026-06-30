@@ -66,8 +66,11 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   PlayerPort? _active;
   late PlayerPort _standby;
   MomentPlaybackRequest? _activeRequest;
-  Future<void> _requestTail = Future<void>.value();
+  PlayerPort? _ownedStandby;
+  int? _standbyOwnerGeneration;
+  PlayerPort? _completingPlayer;
   var _requestGeneration = 0;
+  var _activeNarration = false;
   var _disposed = false;
 
   @override
@@ -78,39 +81,52 @@ final class PlaybackCoordinator implements LivePlaybackPort {
 
   @override
   Future<void> startMoment(MomentPlaybackRequest request) {
-    if (_disposed || _activeRequest?.momentId == request.momentId) {
+    if (_disposed) {
       return Future<void>.value();
     }
     final generation = ++_requestGeneration;
     _incomingFade.cancel();
     _outgoingFade.cancel();
-    final operation = _requestTail.then(
-      (_) => _startMoment(request, generation),
+    final target = _standby;
+    final hadInFlightStandby = identical(_ownedStandby, target);
+
+    if (_activeRequest?.momentId == request.momentId) {
+      if (!hadInFlightStandby) {
+        return Future<void>.value();
+      }
+      _ownedStandby = target;
+      _standbyOwnerGeneration = generation;
+      return _cancelStandbyAndRestoreActive(target, generation);
+    }
+
+    // Ownership moves synchronously, before stop releases an older load.
+    _ownedStandby = target;
+    _standbyOwnerGeneration = generation;
+    final releasePrevious = hadInFlightStandby
+        ? _bestEffort(target.stop)
+        : Future<void>.value();
+    return releasePrevious.then(
+      (_) => _startMoment(request, generation, target),
     );
-    _requestTail = operation.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return operation;
   }
 
   Future<void> _startMoment(
     MomentPlaybackRequest request,
     int generation,
+    PlayerPort target,
   ) async {
-    if (!_isCurrent(generation)) {
+    if (!_ownsStandby(target, generation)) {
       return;
     }
     final snapshotBeforeRequest = _snapshot.value;
-    final target = _standby;
     _positions[target] = Duration.zero;
     _durations[target] = null;
     _publish(phase: PlaybackPhase.loading, playing: _active != null);
     try {
       await target.setVolume(0);
       await target.load(request.uri);
-      if (!_isCurrent(generation)) {
-        await _cleanUpStaleTarget(target);
+      if (!_ownsStandby(target, generation)) {
+        await _cleanUpOwnedTarget(target, generation);
         return;
       }
       await target.setLooping(request.loop);
@@ -148,14 +164,20 @@ final class PlaybackCoordinator implements LivePlaybackPort {
           ),
         ]);
       }
-      if (!_isCurrent(generation)) {
-        await _cleanUpStaleTarget(target);
+      if (!_ownsStandby(target, generation)) {
+        await _cleanUpOwnedTarget(target, generation);
         return;
       }
       await oldActive?.stop();
+      if (!_ownsStandby(target, generation)) {
+        await _restoreActivePlayback();
+        return;
+      }
       _active = target;
       _activeRequest = request;
+      _activeNarration = false;
       _standby = identical(target, _playerA) ? _playerB : _playerA;
+      _releaseStandbyOwnership(target, generation);
       _publish(
         phase: PlaybackPhase.playing,
         playing: true,
@@ -169,8 +191,12 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       if (_disposed) {
         return;
       }
+      if (!_ownsStandby(target, generation)) {
+        return;
+      }
       await _bestEffort(target.stop);
-      if (_isCurrent(generation)) {
+      if (_ownsStandby(target, generation)) {
+        _releaseStandbyOwnership(target, generation);
         _publish(
           phase: snapshotBeforeRequest.phase,
           playing: snapshotBeforeRequest.playing,
@@ -216,9 +242,12 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     _requestGeneration++;
     _incomingFade.cancel();
     _outgoingFade.cancel();
-    await _active?.stop();
+    final playersToStop = <PlayerPort>{?_active, ?_ownedStandby};
+    _releaseStandbyOwnership();
+    await Future.wait(playersToStop.map((player) => player.stop()));
     _active = null;
     _activeRequest = null;
+    _activeNarration = false;
     _publish(
       phase: PlaybackPhase.stopped,
       playing: false,
@@ -240,6 +269,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       return;
     }
     await player.setVolume(_effectiveVolume(request, narration: active));
+    _activeNarration = active;
     _publish(narrationActive: active);
   }
 
@@ -290,7 +320,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       return;
     }
     await player.setVolume(
-      _effectiveVolume(request, narration: _snapshot.value.narrationActive),
+      _effectiveVolume(request, narration: _activeNarration),
     );
   }
 
@@ -301,12 +331,40 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     await _applyActiveVolume();
   }
 
-  Future<void> _cleanUpStaleTarget(PlayerPort target) async {
-    if (_disposed) {
+  Future<void> _restoreActivePlayback() async {
+    if (_disposed || _active == null) {
+      return;
+    }
+    await _bestEffort(_restoreActiveVolume);
+    _active!.play();
+  }
+
+  Future<void> _cancelStandbyAndRestoreActive(
+    PlayerPort target,
+    int generation,
+  ) async {
+    await _bestEffort(target.stop);
+    if (!_ownsStandby(target, generation)) {
+      return;
+    }
+    _releaseStandbyOwnership(target, generation);
+    await _restoreActivePlayback();
+    _publish(
+      phase: PlaybackPhase.playing,
+      playing: true,
+      narrationActive: _activeNarration,
+    );
+  }
+
+  Future<void> _cleanUpOwnedTarget(PlayerPort target, int generation) async {
+    if (!_ownsStandby(target, generation)) {
       return;
     }
     await _bestEffort(target.stop);
-    await _bestEffort(_restoreActiveVolume);
+    if (_ownsStandby(target, generation)) {
+      _releaseStandbyOwnership(target, generation);
+      await _bestEffort(_restoreActiveVolume);
+    }
   }
 
   Future<void> _bestEffort(Future<void> Function() operation) async {
@@ -337,13 +395,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       )
       ..add(
         player.completed.listen((_) {
-          if (identical(player, _active)) {
-            _publish(
-              phase: PlaybackPhase.stopped,
-              playing: false,
-              position: Duration.zero,
-            );
-          }
+          unawaited(_handleCompletion(player));
         }),
       )
       ..add(
@@ -361,8 +413,113 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       );
   }
 
+  Future<void> _handleCompletion(PlayerPort player) async {
+    final request = _activeRequest;
+    if (_disposed ||
+        request == null ||
+        request.loop ||
+        !identical(player, _active) ||
+        _standbyOwnerGeneration != null ||
+        identical(_completingPlayer, player)) {
+      return;
+    }
+    final generation = _requestGeneration;
+    _completingPlayer = player;
+    try {
+      try {
+        await _outgoingFade.run(
+          from: _effectiveVolume(request, narration: _activeNarration),
+          to: 0,
+          duration: request.fadeOut,
+          apply: player.setVolume,
+        );
+      } on Object {
+        if (_isActiveGeneration(player, request, generation)) {
+          _emitAlert(
+            PlaybackAlert(
+              PlaybackAlertCode.sourceFailed,
+              'Não foi possível finalizar ${request.audioDisplayName}.',
+              momentId: request.momentId,
+            ),
+          );
+        }
+      }
+      if (!_isActiveGeneration(player, request, generation)) {
+        return;
+      }
+      try {
+        await player.stop();
+      } on Object catch (error) {
+        if (_isActiveGeneration(player, request, generation)) {
+          _emitAlert(
+            PlaybackAlert(
+              PlaybackAlertCode.sourceFailed,
+              'Não foi possível parar ${request.audioDisplayName}: $error',
+              momentId: request.momentId,
+            ),
+          );
+        }
+      }
+      if (!_isActiveGeneration(player, request, generation)) {
+        return;
+      }
+      _active = null;
+      _activeRequest = null;
+      _activeNarration = false;
+      _publish(
+        phase: PlaybackPhase.stopped,
+        playing: false,
+        position: Duration.zero,
+        clearDuration: true,
+        clearActiveMoment: true,
+        narrationActive: false,
+      );
+    } on Object catch (error) {
+      if (_isActiveGeneration(player, request, generation)) {
+        _emitAlert(
+          PlaybackAlert(
+            PlaybackAlertCode.sourceFailed,
+            error.toString(),
+            momentId: request.momentId,
+          ),
+        );
+      }
+    } finally {
+      if (identical(_completingPlayer, player)) {
+        _completingPlayer = null;
+      }
+    }
+  }
+
+  bool _isActiveGeneration(
+    PlayerPort player,
+    MomentPlaybackRequest request,
+    int generation,
+  ) {
+    return _isCurrent(generation) &&
+        identical(player, _active) &&
+        identical(request, _activeRequest);
+  }
+
   bool _isCurrent(int generation) =>
       !_disposed && generation == _requestGeneration;
+
+  bool _ownsStandby(PlayerPort target, int generation) {
+    return _isCurrent(generation) &&
+        identical(_ownedStandby, target) &&
+        _standbyOwnerGeneration == generation;
+  }
+
+  void _releaseStandbyOwnership([PlayerPort? target, int? generation]) {
+    if (target != null && !identical(_ownedStandby, target)) {
+      return;
+    }
+    if (generation != null && _standbyOwnerGeneration != generation) {
+      return;
+    }
+    _ownedStandby = null;
+    _standbyOwnerGeneration = null;
+  }
 
   void _emitAlert(PlaybackAlert alert) {
     if (!_disposed) {

@@ -11,8 +11,10 @@ final class FakePlayerPort implements PlayerPort {
   final volumes = <double>[];
   final loadedSources = <Uri>[];
   final _controlledLoads = <Completer<void>>[];
+  final _activeControlledLoads = <Completer<void>>{};
 
   Completer<void>? controlledLoad;
+  Completer<void>? controlledStop;
   Object? loadError;
   Object? nextVolumeError;
   Object? nextStopError;
@@ -50,7 +52,15 @@ final class FakePlayerPort implements PlayerPort {
     final controlled = _controlledLoads.isEmpty
         ? controlledLoad
         : _controlledLoads.removeAt(0);
-    await controlled?.future;
+    if (controlled == null) {
+      return;
+    }
+    _activeControlledLoads.add(controlled);
+    try {
+      await controlled.future;
+    } finally {
+      _activeControlledLoads.remove(controlled);
+    }
   }
 
   @override
@@ -69,6 +79,12 @@ final class FakePlayerPort implements PlayerPort {
   Future<void> stop() async {
     operations.add('stop');
     playing = false;
+    for (final load in _activeControlledLoads.toList()) {
+      if (!load.isCompleted) {
+        load.completeError(StateError('load canceled by stop'));
+      }
+    }
+    await controlledStop?.future;
     final error = nextStopError;
     nextStopError = null;
     if (error != null) {

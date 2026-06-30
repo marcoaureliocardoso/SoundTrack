@@ -120,33 +120,169 @@ void main() {
       await fixture.dispose();
     });
 
+    test('tapping active moment cancels transition and restores it', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      await fixture.coordinator.setNarration(true);
+
+      final transition = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+      expect(
+        fixture.coordinator.snapshot.value.phase,
+        PlaybackPhase.transitioning,
+      );
+      expect(fixture.coordinator.snapshot.value.narrationActive, isFalse);
+
+      final cancel = fixture.coordinator.startMoment(_request('one'));
+      await Future.wait([transition, cancel]);
+
+      expect(fixture.playerB.operations.last, 'stop');
+      expect(fixture.playerB.playing, isFalse);
+      expect(fixture.playerA.playing, isTrue);
+      expect(fixture.playerA.volumes.last, closeTo(0.2, 0.000001));
+      expect(fixture.coordinator.snapshot.value.activeMomentId, 'one');
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.playing);
+      expect(fixture.coordinator.snapshot.value.narrationActive, isTrue);
+
+      await fixture.dispose();
+    });
+
+    test('a newer request supersedes an active-tap cancellation', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final two = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+      fixture.playerB.controlledStop = Completer<void>();
+
+      final cancelToOne = fixture.coordinator.startMoment(_request('one'));
+      await _flush();
+      final three = fixture.coordinator.startMoment(_request('three'));
+      await _flush();
+
+      expect(fixture.playerB.loadedSources, [Uri.parse('content://audio/two')]);
+
+      fixture.playerB.controlledStop!.complete();
+      await _flush();
+      expect(fixture.playerB.loadedSources, [
+        Uri.parse('content://audio/two'),
+        Uri.parse('content://audio/three'),
+      ]);
+
+      fixture.outgoingScheduler.emit(1);
+      fixture.incomingScheduler.emit(1);
+      await Future.wait([
+        fixture.outgoingScheduler.closeCurrent(),
+        fixture.incomingScheduler.closeCurrent(),
+      ]);
+      await Future.wait([two, cancelToOne, three]);
+
+      expect(fixture.coordinator.snapshot.value.activeMomentId, 'three');
+      expect(fixture.playerB.playing, isTrue);
+
+      await fixture.dispose();
+    });
+
+    test('loop completion is ignored and keeps playing', () async {
+      final loopFixture = _Fixture();
+      final loopStart = loopFixture.coordinator.startMoment(
+        _request('loop', loop: true),
+      );
+      await _flush();
+      loopFixture.incomingScheduler.emit(1);
+      await loopFixture.incomingScheduler.closeCurrent();
+      await loopStart;
+
+      expect(loopFixture.playerA.looping, isTrue);
+      loopFixture.playerA.completedController.add(null);
+      await _flush();
+
+      expect(loopFixture.outgoingScheduler.runCount, 0);
+      expect(loopFixture.playerA.operations, isNot(contains('stop')));
+      expect(
+        loopFixture.coordinator.snapshot.value.phase,
+        PlaybackPhase.playing,
+      );
+      expect(loopFixture.coordinator.snapshot.value.activeMomentId, 'loop');
+      await loopFixture.dispose();
+    });
+
     test(
-      'configures loop and reports a non-loop completion as stopped',
+      'non-loop completion fades out, stops, and clears active state',
       () async {
-        final loopFixture = _Fixture();
-        final loopStart = loopFixture.coordinator.startMoment(
-          _request('loop', loop: true),
-        );
-        await _flush();
-        loopFixture.incomingScheduler.emit(1);
-        await loopFixture.incomingScheduler.closeCurrent();
-        await loopStart;
-
-        expect(loopFixture.playerA.looping, isTrue);
-        await loopFixture.dispose();
-
         final stopFixture = _Fixture();
         await stopFixture.startFirst();
+        await stopFixture.coordinator.setNarration(true);
         stopFixture.playerA.completedController.add(null);
         await _flush();
 
+        expect(stopFixture.outgoingScheduler.runCount, 1);
+        stopFixture.outgoingScheduler.emit(0);
+        await _flush();
+        expect(stopFixture.playerA.volumes.last, closeTo(0.2, 0.000001));
+        stopFixture.outgoingScheduler.emit(1);
+        await stopFixture.outgoingScheduler.closeCurrent();
+        await _flush();
+
+        expect(stopFixture.playerA.volumes.last, 0);
+        expect(stopFixture.playerA.operations.last, 'stop');
         expect(
           stopFixture.coordinator.snapshot.value.phase,
           PlaybackPhase.stopped,
         );
         expect(stopFixture.coordinator.snapshot.value.playing, isFalse);
+        expect(stopFixture.coordinator.snapshot.value.activeMomentId, isNull);
+        expect(stopFixture.coordinator.snapshot.value.narrationActive, isFalse);
 
         await stopFixture.dispose();
+      },
+    );
+
+    test('completion from outgoing player cannot disrupt transition', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final transition = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+
+      fixture.playerA.completedController.add(null);
+      await _flush();
+
+      expect(fixture.outgoingScheduler.runCount, 1);
+      fixture.outgoingScheduler.emit(1);
+      fixture.incomingScheduler.emit(1);
+      await Future.wait([
+        fixture.outgoingScheduler.closeCurrent(),
+        fixture.incomingScheduler.closeCurrent(),
+      ]);
+      await transition;
+
+      expect(fixture.coordinator.snapshot.value.activeMomentId, 'two');
+      expect(fixture.playerB.playing, isTrue);
+
+      await fixture.dispose();
+    });
+
+    test(
+      'completion stop error emits alert without escaping async handler',
+      () async {
+        final fixture = _Fixture();
+        await fixture.startFirst();
+        fixture.playerA.nextStopError = Exception('decoder stop failed');
+        final alerts = <PlaybackAlert>[];
+        final subscription = fixture.coordinator.alerts.listen(alerts.add);
+
+        fixture.playerA.completedController.add(null);
+        await _flush();
+        fixture.outgoingScheduler.emit(1);
+        await fixture.outgoingScheduler.closeCurrent();
+        await _flush();
+
+        expect(alerts, hasLength(1));
+        expect(alerts.single.code, PlaybackAlertCode.sourceFailed);
+        expect(alerts.single.momentId, 'one');
+        expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
+
+        await subscription.cancel();
+        await fixture.dispose();
       },
     );
 
@@ -230,20 +366,31 @@ void main() {
       await fixture.dispose();
     });
 
+    test('stop cancels an in-flight standby load', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      fixture.playerB.holdNextLoad();
+      final transition = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+
+      await fixture.coordinator.stop();
+      await transition.timeout(const Duration(seconds: 1));
+
+      expect(fixture.playerB.operations.last, 'stop');
+      expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.stopped);
+
+      await fixture.dispose();
+    });
+
     test('latest tap supersedes an in-flight transition', () async {
       final fixture = _Fixture();
       await fixture.startFirst();
-      final releaseTwo = fixture.playerB.holdNextLoad();
+      fixture.playerB.holdNextLoad();
 
       final two = fixture.coordinator.startMoment(_request('two'));
       await _flush();
       final three = fixture.coordinator.startMoment(_request('three'));
-      await _flush();
-
-      expect(fixture.playerB.loadedSources, [Uri.parse('content://audio/two')]);
-      expect(fixture.coordinator.snapshot.value.activeMomentId, 'one');
-
-      releaseTwo.complete();
       await _flush();
 
       expect(fixture.playerB.loadedSources, [
