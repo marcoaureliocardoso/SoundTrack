@@ -40,13 +40,13 @@ final class JustAudioPlayerPort implements PlayerPort {
         }
       },
       onError: (Object error, StackTrace stackTrace) {
-        _emitAsyncError('Unable to observe playback state', error);
+        _publishError('Unable to observe playback state', error);
       },
     );
     _backendErrorSubscription = _backend.errorStream.listen(
-      (error) => _emitAsyncError('Audio player failure', error),
+      (error) => _publishError('Audio player failure', error),
       onError: (Object error, StackTrace stackTrace) {
-        _emitAsyncError('Unable to observe audio player errors', error);
+        _publishError('Unable to observe audio player errors', error);
       },
     );
   }
@@ -59,7 +59,6 @@ final class JustAudioPlayerPort implements PlayerPort {
   late final StreamSubscription<PlayerException> _backendErrorSubscription;
 
   final _activeLoads = <_LoadOperation>{};
-  final _recentAsyncErrors = <Object>{};
   Future<void>? _disposeFuture;
   bool _disposed = false;
 
@@ -119,7 +118,9 @@ final class JustAudioPlayerPort implements PlayerPort {
     _ensureActive();
     unawaited(
       _backend.play().catchError((Object error, StackTrace stackTrace) {
-        _emitAsyncError('Unable to play audio', error);
+        if (error is! PlayerException) {
+          _publishError('Unable to play audio', error);
+        }
       }),
     );
   }
@@ -216,29 +217,11 @@ final class JustAudioPlayerPort implements PlayerPort {
         : PlayerPortError(message, cause: error);
   }
 
-  void _emitAsyncError(String message, Object error) {
+  void _publishError(String message, Object error) {
     if (_disposed) {
       return;
     }
-    final key = _errorKey(error);
-    if (!_recentAsyncErrors.add(key)) {
-      return;
-    }
     _errorsController.add(_toPlayerPortError(message, error));
-    scheduleMicrotask(() {
-      scheduleMicrotask(() => _recentAsyncErrors.remove(key));
-    });
-  }
-
-  Object _errorKey(Object error) {
-    if (error case PlayerException(
-      code: final code,
-      message: final message,
-      index: final index,
-    )) {
-      return (PlayerException, code, message, index);
-    }
-    return error;
   }
 }
 

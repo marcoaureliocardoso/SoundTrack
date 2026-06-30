@@ -49,7 +49,7 @@ void main() {
     });
 
     test(
-      'deduplicates the same load failure from Future and errorStream',
+      'uses errorStream as canonical for the same load PlayerException',
       () async {
         final cause = PlayerException(7, 'decoder failed', 0);
         backend.nextLoadError = cause;
@@ -220,7 +220,7 @@ void main() {
     );
 
     test(
-      'deduplicates a play Future failure also sent by errorStream',
+      'uses delayed errorStream after play Future as canonical PlayerException',
       () async {
         final playCompleter = Completer<void>();
         backend.playCompleter = playCompleter;
@@ -229,10 +229,34 @@ void main() {
         final subscription = port.errors.listen(errors.add);
 
         port.play();
+        playCompleter.completeError(cause);
+        await pumpEventQueue(times: 4);
+        expect(errors, isEmpty);
+
         backend.errorController.add(cause);
+        await pumpEventQueue();
+        expect(errors, hasLength(1));
+        expect(errors.single.cause, same(cause));
+        await subscription.cancel();
+      },
+    );
+
+    test(
+      'ignores delayed play Future after canonical PlayerException stream',
+      () async {
+        final playCompleter = Completer<void>();
+        backend.playCompleter = playCompleter;
+        final cause = PlayerException(12, 'play failed stream first', 0);
+        final errors = <PlayerPortError>[];
+        final subscription = port.errors.listen(errors.add);
+
+        port.play();
+        backend.errorController.add(cause);
+        await pumpEventQueue(times: 4);
+        expect(errors, hasLength(1));
+
         playCompleter.completeError(cause);
         await pumpEventQueue();
-
         expect(errors, hasLength(1));
         expect(errors.single.cause, same(cause));
         await subscription.cancel();
