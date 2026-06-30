@@ -76,6 +76,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   var _activeNarration = false;
   var _pendingStops = 0;
   var _disposed = false;
+  Future<void>? _disposeFuture;
 
   @override
   ValueListenable<PlaybackSnapshot> get snapshot => _snapshot;
@@ -270,19 +271,24 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     return _enqueue(() async {
       try {
         await releaseStandby;
+        if (_disposed) {
+          return;
+        }
         await _active?.stop();
       } finally {
-        _active = null;
-        _activeRequest = null;
-        _activeNarration = false;
-        _publish(
-          phase: PlaybackPhase.stopped,
-          playing: false,
-          position: Duration.zero,
-          clearDuration: true,
-          clearActiveMoment: true,
-          narrationActive: false,
-        );
+        if (!_disposed) {
+          _active = null;
+          _activeRequest = null;
+          _activeNarration = false;
+          _publish(
+            phase: PlaybackPhase.stopped,
+            playing: false,
+            position: Duration.zero,
+            clearDuration: true,
+            clearActiveMoment: true,
+            narrationActive: false,
+          );
+        }
         _pendingStops--;
       }
     });
@@ -618,19 +624,43 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_disposed) {
-      return;
+  Future<void> dispose() {
+    final existing = _disposeFuture;
+    if (existing != null) {
+      return existing;
     }
+    final disposal = _dispose();
+    _disposeFuture = disposal;
+    return disposal;
+  }
+
+  Future<void> _dispose() async {
     _disposed = true;
     _requestGeneration++;
     _incomingFade.cancel();
     _outgoingFade.cancel();
+    final ownedStandby = _ownedStandby;
+    _releaseStandbyOwnership();
+    if (ownedStandby != null) {
+      await _bestEffort(ownedStandby.stop);
+    }
+    await _drainCommandQueue();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
+    await _drainCommandQueue();
     await Future.wait([_playerA.dispose(), _playerB.dispose()]);
     await _alerts.close();
     _snapshot.dispose();
+  }
+
+  Future<void> _drainCommandQueue() async {
+    while (true) {
+      final tail = _commandTail;
+      await tail;
+      if (identical(tail, _commandTail)) {
+        return;
+      }
+    }
   }
 }

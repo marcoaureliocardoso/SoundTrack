@@ -725,7 +725,7 @@ void main() {
       'dispose is idempotent and in-flight load cannot publish afterward',
       () async {
         final fixture = _Fixture();
-        final releaseLoad = fixture.playerA.holdNextLoad();
+        fixture.playerA.holdNextLoad();
         final start = fixture.coordinator.startMoment(_request('one'));
         await _flush();
         var publications = 0;
@@ -738,7 +738,6 @@ void main() {
         );
         final publicationsAfterDispose = publications;
 
-        releaseLoad.complete();
         await start;
 
         expect(fixture.playerA.disposeCalls, 1);
@@ -747,6 +746,36 @@ void main() {
         expect(publications, publicationsAfterDispose);
       },
     );
+
+    test('dispose drains queued commands before disposing players', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final releasePause = fixture.playerA.holdNextPause();
+      final pause = fixture.coordinator.pause();
+      await _flush();
+      final stop = fixture.coordinator.stop();
+
+      var disposeCompleted = false;
+      final firstDispose = fixture.coordinator.dispose()
+        ..then((_) => disposeCompleted = true);
+      final secondDispose = fixture.coordinator.dispose();
+      expect(identical(firstDispose, secondDispose), isTrue);
+      await _flush();
+      expect(disposeCompleted, isFalse);
+
+      releasePause.complete();
+      await Future.wait([pause, stop, firstDispose, secondDispose]);
+
+      final disposeIndex = fixture.playerA.operations.indexOf('dispose');
+      expect(disposeIndex, greaterThanOrEqualTo(0));
+      expect(
+        fixture.playerA.operations.skip(disposeIndex + 1),
+        isEmpty,
+        reason: 'no queued command may touch a physically disposed player',
+      );
+      expect(fixture.playerA.disposeCalls, 1);
+      expect(fixture.playerB.disposeCalls, 1);
+    });
   });
 }
 
