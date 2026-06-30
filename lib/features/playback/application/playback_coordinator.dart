@@ -61,6 +61,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   final _subscriptions = <StreamSubscription<Object?>>[];
   final _positions = <PlayerPort, Duration>{};
   final _durations = <PlayerPort, Duration?>{};
+  final _standbyErrors = <int, PlayerPortError>{};
 
   EventAudioSettings _volumes;
   PlayerPort? _active;
@@ -68,9 +69,12 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   MomentPlaybackRequest? _activeRequest;
   PlayerPort? _ownedStandby;
   int? _standbyOwnerGeneration;
+  int? _standbyListeningGeneration;
   PlayerPort? _completingPlayer;
+  Future<void> _commandTail = Future<void>.value();
   var _requestGeneration = 0;
   var _activeNarration = false;
+  var _pendingStops = 0;
   var _disposed = false;
 
   @override
@@ -86,28 +90,36 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     }
     final target = _standby;
     final hadInFlightStandby = identical(_ownedStandby, target);
-    if (_activeRequest?.momentId == request.momentId && !hadInFlightStandby) {
+    if (_activeRequest?.momentId == request.momentId &&
+        !hadInFlightStandby &&
+        _pendingStops == 0) {
       return Future<void>.value();
     }
     final generation = ++_requestGeneration;
     _incomingFade.cancel();
     _outgoingFade.cancel();
+    final releasePrevious = hadInFlightStandby
+        ? _bestEffort(target.stop)
+        : Future<void>.value();
 
     if (_activeRequest?.momentId == request.momentId) {
       _ownedStandby = target;
       _standbyOwnerGeneration = generation;
-      return _cancelStandbyAndRestoreActive(target, generation);
+      _standbyListeningGeneration = null;
+      return _enqueue(() async {
+        await releasePrevious;
+        await _cancelStandbyAndRestoreActive(target, generation);
+      });
     }
 
     // Ownership moves synchronously, before stop releases an older load.
     _ownedStandby = target;
     _standbyOwnerGeneration = generation;
-    final releasePrevious = hadInFlightStandby
-        ? _bestEffort(target.stop)
-        : Future<void>.value();
-    return releasePrevious.then(
-      (_) => _startMoment(request, generation, target),
-    );
+    _standbyListeningGeneration = null;
+    return _enqueue(() async {
+      await releasePrevious;
+      await _startMoment(request, generation, target);
+    });
   }
 
   Future<void> _startMoment(
@@ -118,6 +130,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     if (!_ownsStandby(target, generation)) {
       return;
     }
+    _standbyListeningGeneration = generation;
     final snapshotBeforeRequest = _snapshot.value;
     _positions[target] = Duration.zero;
     _durations[target] = null;
@@ -125,12 +138,14 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     try {
       await target.setVolume(0);
       await target.load(request.uri);
+      _throwStandbyError(generation);
       if (!_ownsStandby(target, generation)) {
         await _cleanUpOwnedTarget(target, generation);
         return;
       }
       await target.setLooping(request.loop);
       target.play();
+      _throwStandbyError(generation);
       final targetVolume = _effectiveVolume(request);
       final oldActive = _active;
       final oldRequest = _activeRequest;
@@ -164,6 +179,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
           ),
         ]);
       }
+      _throwStandbyError(generation);
       if (!_ownsStandby(target, generation)) {
         await _cleanUpOwnedTarget(target, generation);
         return;
@@ -177,6 +193,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       _activeRequest = request;
       _activeNarration = false;
       _standby = identical(target, _playerA) ? _playerB : _playerA;
+      _standbyErrors.remove(generation);
       _releaseStandbyOwnership(target, generation);
       _publish(
         phase: PlaybackPhase.playing,
@@ -187,7 +204,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
         activeMomentId: request.momentId,
         narrationActive: false,
       );
-    } on Object catch (_) {
+    } on Object catch (error) {
       if (_disposed) {
         return;
       }
@@ -203,10 +220,12 @@ final class PlaybackCoordinator implements LivePlaybackPort {
           narrationActive: snapshotBeforeRequest.narrationActive,
         );
         await _bestEffort(_restoreActiveVolume);
+        final standbyError = _standbyErrors.remove(generation);
         _emitAlert(
           PlaybackAlert(
             PlaybackAlertCode.sourceFailed,
-            'Não foi possível reproduzir ${request.audioDisplayName}.',
+            standbyError?.message ??
+                'Não foi possível reproduzir ${request.audioDisplayName}: $error',
             momentId: request.momentId,
           ),
         );
@@ -215,51 +234,62 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   }
 
   @override
-  Future<void> pause() async {
+  Future<void> pause() => _enqueueIfAlive(() async {
     final active = _active;
     if (_disposed || active == null) {
       return;
     }
     await active.pause();
     _publish(phase: PlaybackPhase.paused, playing: false);
-  }
+  });
 
   @override
-  Future<void> resume() async {
+  Future<void> resume() => _enqueueIfAlive(() async {
     final active = _active;
     if (_disposed || active == null) {
       return;
     }
     active.play();
     _publish(phase: PlaybackPhase.playing, playing: true);
-  }
+  });
 
   @override
-  Future<void> stop() async {
+  Future<void> stop() {
     if (_disposed) {
-      return;
+      return Future<void>.value();
     }
     _requestGeneration++;
     _incomingFade.cancel();
     _outgoingFade.cancel();
-    final playersToStop = <PlayerPort>{?_active, ?_ownedStandby};
+    final ownedStandby = _ownedStandby;
     _releaseStandbyOwnership();
-    await Future.wait(playersToStop.map((player) => player.stop()));
-    _active = null;
-    _activeRequest = null;
-    _activeNarration = false;
-    _publish(
-      phase: PlaybackPhase.stopped,
-      playing: false,
-      position: Duration.zero,
-      clearDuration: true,
-      clearActiveMoment: true,
-      narrationActive: false,
-    );
+    final releaseStandby = ownedStandby == null
+        ? Future<void>.value()
+        : _bestEffort(ownedStandby.stop);
+    _pendingStops++;
+    return _enqueue(() async {
+      try {
+        await releaseStandby;
+        await _active?.stop();
+      } finally {
+        _active = null;
+        _activeRequest = null;
+        _activeNarration = false;
+        _publish(
+          phase: PlaybackPhase.stopped,
+          playing: false,
+          position: Duration.zero,
+          clearDuration: true,
+          clearActiveMoment: true,
+          narrationActive: false,
+        );
+        _pendingStops--;
+      }
+    });
   }
 
   @override
-  Future<void> setNarration(bool active) async {
+  Future<void> setNarration(bool active) => _enqueueIfAlive(() async {
     if (_disposed) {
       return;
     }
@@ -271,14 +301,14 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     await player.setVolume(_effectiveVolume(request, narration: active));
     _activeNarration = active;
     _publish(narrationActive: active);
-  }
+  });
 
   @override
   Future<void> setSessionVolumes({
     required double masterVolume,
     required double musicVolume,
     required double narrationVolume,
-  }) async {
+  }) => _enqueueIfAlive(() async {
     if (_disposed) {
       return;
     }
@@ -293,7 +323,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       musicVolume: _volumes.musicVolume,
       narrationVolume: _volumes.narrationVolume,
     );
-  }
+  });
 
   @override
   Future<void> restorePresetVolumes() => setSessionVolumes(
@@ -343,7 +373,6 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     PlayerPort target,
     int generation,
   ) async {
-    await _bestEffort(target.stop);
     if (!_ownsStandby(target, generation)) {
       return;
     }
@@ -375,6 +404,26 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     }
   }
 
+  Future<void> _enqueue(Future<void> Function() command) {
+    final result = _commandTail.then((_) => command());
+    _commandTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
+
+  Future<void> _enqueueIfAlive(Future<void> Function() command) {
+    return _disposed ? Future<void>.value() : _enqueue(command);
+  }
+
+  void _throwStandbyError(int generation) {
+    final error = _standbyErrors[generation];
+    if (error != null) {
+      throw error;
+    }
+  }
+
   void _subscribe(PlayerPort player) {
     _subscriptions
       ..add(
@@ -395,11 +444,21 @@ final class PlaybackCoordinator implements LivePlaybackPort {
       )
       ..add(
         player.completed.listen((_) {
-          unawaited(_handleCompletion(player));
+          unawaited(_enqueue(() => _handleCompletion(player)));
         }),
       )
       ..add(
         player.errors.listen((error) {
+          final generation = _standbyOwnerGeneration;
+          if (generation != null &&
+              _standbyListeningGeneration == generation &&
+              identical(player, _ownedStandby)) {
+            _standbyErrors[generation] = error;
+            _incomingFade.cancel();
+            _outgoingFade.cancel();
+            unawaited(_bestEffort(player.stop));
+            return;
+          }
           if (identical(player, _active)) {
             _emitAlert(
               PlaybackAlert(
@@ -419,7 +478,6 @@ final class PlaybackCoordinator implements LivePlaybackPort {
         request == null ||
         request.loop ||
         !identical(player, _active) ||
-        _standbyOwnerGeneration != null ||
         identical(_completingPlayer, player)) {
       return;
     }
@@ -519,6 +577,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     }
     _ownedStandby = null;
     _standbyOwnerGeneration = null;
+    _standbyListeningGeneration = null;
   }
 
   void _emitAlert(PlaybackAlert alert) {

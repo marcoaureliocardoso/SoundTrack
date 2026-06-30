@@ -5,6 +5,7 @@ import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/playback/application/fade_driver.dart';
 import 'package:soundtrack/features/playback/application/live_playback_port.dart';
 import 'package:soundtrack/features/playback/application/playback_coordinator.dart';
+import 'package:soundtrack/features/playback/application/player_port.dart';
 import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
@@ -404,6 +405,167 @@ void main() {
 
       await fixture.dispose();
     });
+
+    test('new start waits for an earlier blocked stop', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      fixture.playerA.controlledStop = Completer<void>();
+
+      final stop = fixture.coordinator.stop();
+      await _flush();
+      final start = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+
+      expect(fixture.playerB.loadedSources, isEmpty);
+
+      fixture.playerA.controlledStop!.complete();
+      await _flush();
+      expect(fixture.playerB.loadedSources, [Uri.parse('content://audio/two')]);
+      fixture.incomingScheduler.emit(1);
+      await fixture.incomingScheduler.closeCurrent();
+      await Future.wait([stop, start]);
+
+      expect(fixture.coordinator.snapshot.value.activeMomentId, 'two');
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.playing);
+
+      await fixture.dispose();
+    });
+
+    test('pending pause cannot publish after stop', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final releasePause = fixture.playerA.holdNextPause();
+
+      final pause = fixture.coordinator.pause();
+      await _flush();
+      final stop = fixture.coordinator.stop();
+      await _flush();
+      releasePause.complete();
+      await Future.wait([pause, stop]);
+
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.stopped);
+      expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
+
+      await fixture.dispose();
+    });
+
+    test('pending narration command cannot publish after stop', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final releaseVolume = fixture.playerA.holdNextVolume();
+
+      final narration = fixture.coordinator.setNarration(true);
+      await _flush();
+      final stop = fixture.coordinator.stop();
+      await _flush();
+      releaseVolume.complete();
+      await Future.wait([narration, stop]);
+
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.stopped);
+      expect(fixture.coordinator.snapshot.value.narrationActive, isFalse);
+
+      await fixture.dispose();
+    });
+
+    test('concurrent narration commands preserve invocation order', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final releaseFirst = fixture.playerA.holdNextVolume();
+
+      final enable = fixture.coordinator.setNarration(true);
+      await _flush();
+      final disable = fixture.coordinator.setNarration(false);
+      await _flush();
+      releaseFirst.complete();
+      await Future.wait([enable, disable]);
+
+      expect(fixture.playerA.volumes.last, closeTo(0.4, 0.000001));
+      expect(fixture.coordinator.snapshot.value.narrationActive, isFalse);
+
+      await fixture.dispose();
+    });
+
+    test('session volumes changed during crossfade win at commit', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final transition = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+
+      final volumes = fixture.coordinator.setSessionVolumes(
+        masterVolume: 0.5,
+        musicVolume: 0.2,
+        narrationVolume: 0.1,
+      );
+      await _flush();
+      fixture.outgoingScheduler.emit(1);
+      fixture.incomingScheduler.emit(1);
+      await Future.wait([
+        fixture.outgoingScheduler.closeCurrent(),
+        fixture.incomingScheduler.closeCurrent(),
+      ]);
+      await Future.wait([transition, volumes]);
+
+      expect(fixture.playerB.volumes.last, closeTo(0.1, 0.000001));
+      expect(fixture.coordinator.snapshot.value.masterVolume, 0.5);
+      expect(fixture.coordinator.snapshot.value.musicVolume, 0.2);
+
+      await fixture.dispose();
+    });
+
+    test('completion during failed load is processed after rollback', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      final load = fixture.playerB.holdNextLoad();
+      final transition = fixture.coordinator.startMoment(_request('two'));
+      await _flush();
+
+      fixture.playerA.completedController.add(null);
+      await _flush();
+      load.completeError(StateError('load failed'));
+      await transition;
+      await _flush();
+
+      expect(fixture.outgoingScheduler.runCount, 1);
+      fixture.outgoingScheduler.emit(1);
+      await fixture.outgoingScheduler.closeCurrent();
+      await _flush();
+      expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
+
+      await fixture.dispose();
+    });
+
+    test(
+      'standby error during fade rolls back instead of committing',
+      () async {
+        final fixture = _Fixture();
+        await fixture.startFirst();
+        final alerts = <PlaybackAlert>[];
+        final subscription = fixture.coordinator.alerts.listen(alerts.add);
+        final transition = fixture.coordinator.startMoment(_request('two'));
+        await _flush();
+
+        fixture.playerB.errorController.add(
+          const PlayerPortError('decoder failed'),
+        );
+        await _flush();
+        fixture.outgoingScheduler.emit(1);
+        fixture.incomingScheduler.emit(1);
+        await Future.wait([
+          fixture.outgoingScheduler.closeCurrent(),
+          fixture.incomingScheduler.closeCurrent(),
+        ]);
+        await transition;
+
+        expect(fixture.coordinator.snapshot.value.activeMomentId, 'one');
+        expect(fixture.playerA.playing, isTrue);
+        expect(fixture.playerB.playing, isFalse);
+        expect(alerts.single.code, PlaybackAlertCode.sourceFailed);
+        expect(alerts.single.momentId, 'two');
+
+        await subscription.cancel();
+        await fixture.dispose();
+      },
+    );
 
     test('latest tap supersedes an in-flight transition', () async {
       final fixture = _Fixture();
