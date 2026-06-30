@@ -237,6 +237,28 @@ void main() {
       },
     );
 
+    test('tapping active moment does not cancel its completion fade', () async {
+      final fixture = _Fixture();
+      await fixture.startFirst();
+      fixture.playerA.completedController.add(null);
+      await _flush();
+      fixture.outgoingScheduler.emit(0.5);
+      await _flush();
+
+      await fixture.coordinator.startMoment(_request('one'));
+
+      expect(fixture.coordinator.snapshot.value.activeMomentId, 'one');
+      fixture.outgoingScheduler.emit(1);
+      await fixture.outgoingScheduler.closeCurrent();
+      await _flush();
+
+      expect(fixture.playerA.operations.last, 'stop');
+      expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.stopped);
+      expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
+
+      await fixture.dispose();
+    });
+
     test('completion from outgoing player cannot disrupt transition', () async {
       final fixture = _Fixture();
       await fixture.startFirst();

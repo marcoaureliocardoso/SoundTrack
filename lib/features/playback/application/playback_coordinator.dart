@@ -84,16 +84,16 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     if (_disposed) {
       return Future<void>.value();
     }
+    final target = _standby;
+    final hadInFlightStandby = identical(_ownedStandby, target);
+    if (_activeRequest?.momentId == request.momentId && !hadInFlightStandby) {
+      return Future<void>.value();
+    }
     final generation = ++_requestGeneration;
     _incomingFade.cancel();
     _outgoingFade.cancel();
-    final target = _standby;
-    final hadInFlightStandby = identical(_ownedStandby, target);
 
     if (_activeRequest?.momentId == request.momentId) {
-      if (!hadInFlightStandby) {
-        return Future<void>.value();
-      }
       _ownedStandby = target;
       _standbyOwnerGeneration = generation;
       return _cancelStandbyAndRestoreActive(target, generation);
