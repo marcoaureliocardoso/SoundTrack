@@ -431,6 +431,30 @@ void main() {
       await fixture.dispose();
     });
 
+    test(
+      'same active request after queued stop performs a fresh start',
+      () async {
+        final fixture = _Fixture();
+        await fixture.startFirst();
+
+        final stop = fixture.coordinator.stop();
+        final restart = fixture.coordinator.startMoment(_request('one'));
+        await _flush();
+        fixture.incomingScheduler.emit(1);
+        await fixture.incomingScheduler.closeCurrent();
+        await Future.wait([stop, restart]);
+
+        expect(fixture.playerB.loadedSources, [
+          Uri.parse('content://audio/one'),
+        ]);
+        expect(fixture.playerB.playing, isTrue);
+        expect(fixture.coordinator.snapshot.value.phase, PlaybackPhase.playing);
+        expect(fixture.coordinator.snapshot.value.activeMomentId, 'one');
+
+        await fixture.dispose();
+      },
+    );
+
     test('pending pause cannot publish after stop', () async {
       final fixture = _Fixture();
       await fixture.startFirst();

@@ -103,7 +103,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
         ? _bestEffort(target.stop)
         : Future<void>.value();
 
-    if (_activeRequest?.momentId == request.momentId) {
+    if (_activeRequest?.momentId == request.momentId && _pendingStops == 0) {
       _ownedStandby = target;
       _standbyOwnerGeneration = generation;
       _standbyListeningGeneration = null;
