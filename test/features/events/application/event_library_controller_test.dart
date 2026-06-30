@@ -208,7 +208,7 @@ void main() {
     });
 
     test(
-      'rename preserves derived pending audio without persisting it',
+      'rename retains pending audio when the next readability check throws',
       () async {
         final event = _eventWithAudio();
         final repository = InMemoryEventRepository([event]);
@@ -216,7 +216,10 @@ void main() {
         final availability = EventAudioAvailabilityService(
           canRead: (_) async {
             canReadCalls++;
-            return false;
+            if (canReadCalls == 1) {
+              return false;
+            }
+            throw StateError('transient read failure');
           },
           probeAudio: (_) async => throw StateError('must not probe'),
         );
@@ -385,17 +388,21 @@ void main() {
     );
 
     test(
-      'duplicate returns and exposes pending projection without persisting it',
+      'duplicate retains pending audio when the next probe throws',
       () async {
         final original = _eventWithAudio();
         final repository = InMemoryEventRepository([original]);
         var canReadCalls = 0;
+        var probeCalls = 0;
         final availability = EventAudioAvailabilityService(
           canRead: (_) async {
             canReadCalls++;
-            return false;
+            return canReadCalls > 1;
           },
-          probeAudio: (_) async => throw StateError('must not probe'),
+          probeAudio: (_) async {
+            probeCalls++;
+            throw StateError('transient probe failure');
+          },
         );
         final controller = EventLibraryController(
           repository: repository,
@@ -422,6 +429,7 @@ void main() {
           isFalse,
         );
         expect(canReadCalls, 2);
+        expect(probeCalls, 1);
       },
     );
   });

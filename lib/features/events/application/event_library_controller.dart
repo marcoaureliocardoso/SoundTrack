@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/event_repository.dart';
+import '../domain/event_moment.dart';
 import '../domain/soundtrack_event.dart';
 
 typedef RevalidateEventAudio =
@@ -90,7 +91,9 @@ class EventLibraryController extends ChangeNotifier {
             moments: [...original.moments],
           );
       await _repository.save(duplicate);
-      final revalidated = await _revalidateOne(duplicate);
+      final revalidated = await _revalidateOne(
+        _overlayKnownAudio(duplicate, sourceEventId: original.id),
+      );
       if (!_disposed) {
         _upsert(revalidated);
       }
@@ -109,7 +112,9 @@ class EventLibraryController extends ChangeNotifier {
         updatedAt: DateTime.now().toUtc(),
       );
       await _repository.save(renamed);
-      final revalidated = await _revalidateOne(renamed);
+      final revalidated = await _revalidateOne(
+        _overlayKnownAudio(renamed, sourceEventId: event.id),
+      );
       if (!_disposed) {
         _upsert(revalidated);
       }
@@ -177,6 +182,51 @@ class EventLibraryController extends ChangeNotifier {
 
   Future<SoundTrackEvent> _revalidateOne(SoundTrackEvent event) async {
     return (await _revalidateAudio([event])).single;
+  }
+
+  SoundTrackEvent _overlayKnownAudio(
+    SoundTrackEvent candidate, {
+    required String sourceEventId,
+  }) {
+    SoundTrackEvent? source;
+    for (final event in _events) {
+      if (event.id == sourceEventId) {
+        source = event;
+        break;
+      }
+    }
+    if (source == null) {
+      return candidate;
+    }
+
+    var changed = false;
+    final moments = <EventMoment>[];
+    for (final moment in candidate.moments) {
+      final candidateAudio = moment.audio;
+      if (candidateAudio == null) {
+        moments.add(moment);
+        continue;
+      }
+
+      EventMoment? sourceMoment;
+      for (final projectedMoment in source.moments) {
+        if (projectedMoment.id == moment.id &&
+            projectedMoment.audio?.uri == candidateAudio.uri) {
+          sourceMoment = projectedMoment;
+          break;
+        }
+      }
+      final projectedAudio = sourceMoment?.audio;
+      if (projectedAudio == null || identical(projectedAudio, candidateAudio)) {
+        moments.add(moment);
+        continue;
+      }
+
+      changed = true;
+      moments.add(moment.copyWith(audio: projectedAudio));
+    }
+
+    return changed ? candidate.copyWith(moments: moments) : candidate;
   }
 
   List<SoundTrackEvent> _ordered(Iterable<SoundTrackEvent> events) {
