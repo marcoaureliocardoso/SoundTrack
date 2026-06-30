@@ -84,6 +84,46 @@ void main() {
     },
   );
 
+  test(
+    'owned playback disposes players when observer disposal fails',
+    () async {
+      final first = FakePlayerPort();
+      final second = FakePlayerPort();
+      final players = <PlayerPort>[first, second];
+      final backend = _FactoryAudioSessionBackend(cancelError: true);
+      final handler = await AudioEngineFactory(
+        createPlayer: () => players.removeAt(0),
+        loadAudioSession: () async => backend,
+      ).prepareHandler();
+
+      await expectLater(handler.dispose(), throwsStateError);
+
+      expect(first.disposeCalls, 1);
+      expect(second.disposeCalls, 1);
+    },
+  );
+
+  test(
+    'factory partial cleanup disposes players when observer cleanup fails',
+    () async {
+      final first = FakePlayerPort();
+      final second = FakePlayerPort();
+      final players = <PlayerPort>[first, second];
+      final original = StateError('handler');
+      final factory = AudioEngineFactory(
+        createPlayer: () => players.removeAt(0),
+        loadAudioSession: () async =>
+            _FactoryAudioSessionBackend(cancelError: true),
+        createHandler: (_) => throw original,
+      );
+
+      await expectLater(factory.prepareHandler(), throwsA(same(original)));
+
+      expect(first.disposeCalls, 1);
+      expect(second.disposeCalls, 1);
+    },
+  );
+
   group('SoundTrackAudioHandler', () {
     late _FakePlaybackCoordinator coordinator;
     late SoundTrackAudioHandler handler;
@@ -355,11 +395,25 @@ void main() {
 }
 
 final class _FactoryAudioSessionBackend implements AudioSessionBackend {
+  _FactoryAudioSessionBackend({this.cancelError = false}) {
+    _interruptions = StreamController<AudioInterruptionEvent>.broadcast();
+    _noisy = StreamController<void>.broadcast();
+    _devices = StreamController<AudioDevicesChangedEvent>.broadcast();
+  }
+
+  final bool cancelError;
   final configurations = <AudioSessionConfiguration>[];
-  final _interruptions = StreamController<AudioInterruptionEvent>.broadcast();
-  final _noisy = StreamController<void>.broadcast();
-  final _devices = StreamController<AudioDevicesChangedEvent>.broadcast();
+  late final StreamController<AudioInterruptionEvent> _interruptions;
+  late final StreamController<void> _noisy;
+  late final StreamController<AudioDevicesChangedEvent> _devices;
   var cancelCount = 0;
+
+  void _cancel() {
+    cancelCount++;
+    if (cancelError) {
+      throw StateError('observer dispose');
+    }
+  }
 
   @override
   Stream<AudioInterruptionEvent> get interruptionEventStream =>
@@ -374,7 +428,7 @@ final class _FactoryAudioSessionBackend implements AudioSessionBackend {
       _countCancellation(_devices.stream);
 
   Stream<T> _countCancellation<T>(Stream<T> stream) =>
-      stream.asBroadcastStream(onCancel: (_) => cancelCount++);
+      _FactoryCancelStream<T>(stream, _cancel);
 
   @override
   Future<void> configure(AudioSessionConfiguration configuration) async {
@@ -383,6 +437,66 @@ final class _FactoryAudioSessionBackend implements AudioSessionBackend {
 
   @override
   Future<bool> setActive(bool active) async => true;
+}
+
+final class _FactoryCancelStream<T> extends Stream<T> {
+  _FactoryCancelStream(this._delegate, this._onCancel);
+
+  final Stream<T> _delegate;
+  final void Function() _onCancel;
+
+  @override
+  StreamSubscription<T> listen(
+    void Function(T event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _FactoryCancelSubscription<T>(
+      _delegate.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: cancelOnError,
+      ),
+      _onCancel,
+    );
+  }
+}
+
+final class _FactoryCancelSubscription<T> implements StreamSubscription<T> {
+  _FactoryCancelSubscription(this._delegate, this._onCancel);
+
+  final StreamSubscription<T> _delegate;
+  final void Function() _onCancel;
+
+  @override
+  Future<void> cancel() async {
+    await _delegate.cancel();
+    _onCancel();
+  }
+
+  @override
+  void onData(void Function(T data)? handleData) =>
+      _delegate.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _delegate.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _delegate.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _delegate.pause(resumeSignal);
+
+  @override
+  void resume() => _delegate.resume();
+
+  @override
+  bool get isPaused => _delegate.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _delegate.asFuture(futureValue);
 }
 
 MediaItem _mediaItem() => MediaItem(

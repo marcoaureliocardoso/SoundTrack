@@ -22,10 +22,10 @@ final class PlaybackInterruptionStarted extends PlaybackSessionEvent {
 }
 
 final class PlaybackInterruptionEnded extends PlaybackSessionEvent {
-  const PlaybackInterruptionEnded(this.type, {required this.focusGranted});
+  const PlaybackInterruptionEnded(this.type, {required this.requestFocus});
 
   final AudioInterruptionType type;
-  final bool focusGranted;
+  final Future<bool> Function() requestFocus;
 }
 
 final class PlaybackRouteChanged extends PlaybackSessionEvent {
@@ -97,7 +97,11 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   var _requestGeneration = 0;
   var _activeNarration = false;
   var _pendingStops = 0;
-  var _resumeAfterInterruption = false;
+  var _userPlaybackIntentGeneration = 0;
+  var _pauseInterruptions = 0;
+  var _duckInterruptions = 0;
+  var _unknownInterruptions = 0;
+  int? _resumeIntentGeneration;
   var _disposed = false;
   Future<void>? _disposeFuture;
 
@@ -112,6 +116,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     if (_disposed) {
       return Future<void>.value();
     }
+    _recordUserPlaybackIntent();
     final target = _standby;
     final hadInFlightStandby = identical(_ownedStandby, target);
     if (_activeRequest?.momentId == request.momentId &&
@@ -259,8 +264,9 @@ final class PlaybackCoordinator implements LivePlaybackPort {
 
   @override
   Future<void> pause() {
-    _resumeAfterInterruption = false;
+    _recordUserPlaybackIntent();
     return _enqueueIfAlive(() async {
+      _resumeIntentGeneration = null;
       final active = _active;
       if (_disposed || active == null) {
         return;
@@ -271,18 +277,22 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   }
 
   @override
-  Future<void> resume() => _enqueueIfAlive(() async {
-    final active = _active;
-    if (_disposed || active == null) {
-      return;
-    }
-    active.play();
-    _publish(phase: PlaybackPhase.playing, playing: true);
-  });
+  Future<void> resume() {
+    _recordUserPlaybackIntent();
+    return _enqueueIfAlive(() async {
+      _resumeIntentGeneration = null;
+      final active = _active;
+      if (_disposed || active == null) {
+        return;
+      }
+      active.play();
+      _publish(phase: PlaybackPhase.playing, playing: true);
+    });
+  }
 
   @override
   Future<void> stop() {
-    _resumeAfterInterruption = false;
+    _recordUserPlaybackIntent();
     if (_disposed) {
       return Future<void>.value();
     }
@@ -297,6 +307,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     _pendingStops++;
     return _enqueue(() async {
       try {
+        _resumeIntentGeneration = null;
         await releaseStandby;
         if (_disposed) {
           return;
@@ -366,11 +377,28 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   );
 
   Future<void> handleAudioSessionEvent(PlaybackSessionEvent event) {
+    final intentGeneration = _userPlaybackIntentGeneration;
+    final wasPlaying = _snapshot.value.playing;
     return _enqueueIfAlive(() async {
       switch (event) {
         case PlaybackInterruptionStarted(:final type):
-          _resumeAfterInterruption =
-              type != AudioInterruptionType.duck && _snapshot.value.playing;
+          switch (type) {
+            case AudioInterruptionType.pause:
+              if (_pauseInterruptions == 0) {
+                _resumeIntentGeneration =
+                    wasPlaying &&
+                        intentGeneration == _userPlaybackIntentGeneration &&
+                        _unknownInterruptions == 0
+                    ? intentGeneration
+                    : null;
+              }
+              _pauseInterruptions++;
+            case AudioInterruptionType.duck:
+              _duckInterruptions++;
+            case AudioInterruptionType.unknown:
+              _unknownInterruptions++;
+              _resumeIntentGeneration = null;
+          }
           _emitAlert(
             PlaybackAlert(
               PlaybackAlertCode.interruptionStarted,
@@ -380,44 +408,73 @@ final class PlaybackCoordinator implements LivePlaybackPort {
               momentId: _activeRequest?.momentId,
             ),
           );
-        case PlaybackInterruptionEnded(:final type, :final focusGranted):
-          final shouldResume = _resumeAfterInterruption;
-          _resumeAfterInterruption = false;
-          if (!focusGranted) {
-            _emitAlert(
-              PlaybackAlert(
-                PlaybackAlertCode.interruptionEnded,
-                'A interrupção terminou, mas o foco de áudio não foi concedido.',
-                momentId: _activeRequest?.momentId,
-              ),
-            );
-            return;
-          }
-          if (shouldResume && type != AudioInterruptionType.duck) {
-            try {
-              _active?.play();
-              if (_active != null) {
-                _publish(phase: PlaybackPhase.playing, playing: true);
+        case PlaybackInterruptionEnded(:final type, :final requestFocus):
+          switch (type) {
+            case AudioInterruptionType.duck:
+              if (_duckInterruptions == 0) {
+                return;
               }
-            } on Object catch (error) {
-              _emitAlert(
-                PlaybackAlert(
-                  PlaybackAlertCode.sourceFailed,
-                  'Não foi possível retomar a reprodução: $error',
-                  momentId: _activeRequest?.momentId,
-                ),
-              );
-            }
+              _duckInterruptions--;
+              _emitInterruptionEnded(type);
+            case AudioInterruptionType.unknown:
+              if (_unknownInterruptions == 0) {
+                return;
+              }
+              _unknownInterruptions--;
+              _emitInterruptionEnded(type);
+            case AudioInterruptionType.pause:
+              if (_pauseInterruptions == 0) {
+                return;
+              }
+              _pauseInterruptions--;
+              if (_pauseInterruptions > 0) {
+                _emitInterruptionEnded(type);
+                return;
+              }
+              final resumeGeneration = _resumeIntentGeneration;
+              _resumeIntentGeneration = null;
+              if (resumeGeneration == null ||
+                  resumeGeneration != _userPlaybackIntentGeneration ||
+                  _unknownInterruptions > 0 ||
+                  _active == null) {
+                _emitInterruptionEnded(type);
+                return;
+              }
+              var focusGranted = false;
+              try {
+                focusGranted = await requestFocus();
+              } on Object {
+                // Report focus denial through the interruption alert below.
+              }
+              if (!focusGranted ||
+                  resumeGeneration != _userPlaybackIntentGeneration ||
+                  _unknownInterruptions > 0 ||
+                  _active == null) {
+                _emitAlert(
+                  PlaybackAlert(
+                    PlaybackAlertCode.interruptionEnded,
+                    focusGranted
+                        ? 'A interrupção terminou sem retomar a reprodução.'
+                        : 'A interrupção terminou, mas o foco de áudio não foi concedido.',
+                    momentId: _activeRequest?.momentId,
+                  ),
+                );
+                return;
+              }
+              try {
+                _active!.play();
+                _publish(phase: PlaybackPhase.playing, playing: true);
+              } on Object catch (error) {
+                _emitAlert(
+                  PlaybackAlert(
+                    PlaybackAlertCode.sourceFailed,
+                    'Não foi possível retomar a reprodução: $error',
+                    momentId: _activeRequest?.momentId,
+                  ),
+                );
+              }
+              _emitInterruptionEnded(type);
           }
-          _emitAlert(
-            PlaybackAlert(
-              PlaybackAlertCode.interruptionEnded,
-              type == AudioInterruptionType.duck
-                  ? 'A redução temporária de volume terminou.'
-                  : 'A interrupção de áudio terminou.',
-              momentId: _activeRequest?.momentId,
-            ),
-          );
         case PlaybackRouteChanged():
           _emitAlert(
             PlaybackAlert(
@@ -428,6 +485,23 @@ final class PlaybackCoordinator implements LivePlaybackPort {
           );
       }
     });
+  }
+
+  void _recordUserPlaybackIntent() {
+    _userPlaybackIntentGeneration++;
+    _resumeIntentGeneration = null;
+  }
+
+  void _emitInterruptionEnded(AudioInterruptionType type) {
+    _emitAlert(
+      PlaybackAlert(
+        PlaybackAlertCode.interruptionEnded,
+        type == AudioInterruptionType.duck
+            ? 'A redução temporária de volume terminou.'
+            : 'A interrupção de áudio terminou.',
+        momentId: _activeRequest?.momentId,
+      ),
+    );
   }
 
   double _effectiveVolume(

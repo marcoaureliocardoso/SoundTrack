@@ -12,137 +12,66 @@ import '../../../support/fake_player_port.dart';
 
 void main() {
   group('playback interruption policy', () {
-    test('begin preserves playback and records auto-resume intent', () async {
+    test('pause interruption resumes once after focus is granted', () async {
       final fixture = _Fixture();
       await fixture.start();
-      final alerts = <PlaybackAlert>[];
-      fixture.coordinator.alerts.listen(alerts.add);
-      final operations = List<String>.of(fixture.playerA.operations);
+      final focus = _FocusProbe();
 
       await fixture.coordinator.handleAudioSessionEvent(
         const PlaybackInterruptionStarted(AudioInterruptionType.pause),
       );
-      await _flush();
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
 
-      expect(fixture.playerA.operations, operations);
-      expect(fixture.coordinator.snapshot.value.playing, isTrue);
-      expect(alerts.single.code, PlaybackAlertCode.interruptionStarted);
+      expect(focus.calls, 1);
+      expect(_playCalls(fixture), 2);
       await fixture.dispose();
     });
 
-    test('end resumes once when playback was active', () async {
+    test('unknown never requests focus or resumes', () async {
       final fixture = _Fixture();
       await fixture.start();
-      final alerts = <PlaybackAlert>[];
-      fixture.coordinator.alerts.listen(alerts.add);
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
-      );
+      final focus = _FocusProbe();
 
       await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.pause,
-          focusGranted: true,
-        ),
+        const PlaybackInterruptionStarted(AudioInterruptionType.unknown),
       );
-      await _flush();
       await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.pause,
-          focusGranted: true,
-        ),
+        _end(AudioInterruptionType.unknown, focus),
       );
-      await _flush();
 
-      expect(
-        fixture.playerA.operations.where((operation) => operation == 'play'),
-        hasLength(2),
-      );
-      expect(alerts.map((alert) => alert.code), [
-        PlaybackAlertCode.interruptionStarted,
-        PlaybackAlertCode.interruptionEnded,
-        PlaybackAlertCode.interruptionEnded,
-      ]);
+      expect(focus.calls, 0);
+      expect(_playCalls(fixture), 1);
       await fixture.dispose();
     });
 
-    test('user pause during interruption cancels auto-resume', () async {
+    test(
+      'pause interruption that begins while paused never requests focus',
+      () async {
+        final fixture = _Fixture();
+        await fixture.start();
+        await fixture.coordinator.pause();
+        final focus = _FocusProbe();
+
+        await fixture.coordinator.handleAudioSessionEvent(
+          const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+        );
+        await fixture.coordinator.handleAudioSessionEvent(
+          _end(AudioInterruptionType.pause, focus),
+        );
+
+        expect(focus.calls, 0);
+        expect(_playCalls(fixture), 1);
+        await fixture.dispose();
+      },
+    );
+
+    test('duck alerts without focus, player, or volume changes', () async {
       final fixture = _Fixture();
       await fixture.start();
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
-      );
-
-      await fixture.coordinator.pause();
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.pause,
-          focusGranted: true,
-        ),
-      );
-
-      expect(
-        fixture.playerA.operations.where((operation) => operation == 'play'),
-        hasLength(1),
-      );
-      expect(fixture.coordinator.snapshot.value.playing, isFalse);
-      await fixture.dispose();
-    });
-
-    test('user stop during interruption cancels auto-resume', () async {
-      final fixture = _Fixture();
-      await fixture.start();
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
-      );
-
-      await fixture.coordinator.stop();
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.pause,
-          focusGranted: true,
-        ),
-      );
-
-      expect(
-        fixture.playerA.operations.where((operation) => operation == 'play'),
-        hasLength(1),
-      );
-      expect(fixture.coordinator.snapshot.value.activeMomentId, isNull);
-      await fixture.dispose();
-    });
-
-    test('focus denial does not resume and emits interruption alert', () async {
-      final fixture = _Fixture();
-      await fixture.start();
-      final alerts = <PlaybackAlert>[];
-      fixture.coordinator.alerts.listen(alerts.add);
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
-      );
-
-      await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.pause,
-          focusGranted: false,
-        ),
-      );
-      await _flush();
-
-      expect(
-        fixture.playerA.operations.where((operation) => operation == 'play'),
-        hasLength(1),
-      );
-      expect(alerts.last.code, PlaybackAlertCode.interruptionEnded);
-      expect(alerts.last.message, contains('foco'));
-      await fixture.dispose();
-    });
-
-    test('duck alerts but does not change session volumes', () async {
-      final fixture = _Fixture();
-      await fixture.start();
+      final focus = _FocusProbe();
       final volumes = List<double>.of(fixture.playerA.volumes);
-      final snapshot = fixture.coordinator.snapshot.value;
       final alerts = <PlaybackAlert>[];
       fixture.coordinator.alerts.listen(alerts.add);
 
@@ -150,27 +79,195 @@ void main() {
         const PlaybackInterruptionStarted(AudioInterruptionType.duck),
       );
       await fixture.coordinator.handleAudioSessionEvent(
-        const PlaybackInterruptionEnded(
-          AudioInterruptionType.duck,
-          focusGranted: true,
-        ),
+        _end(AudioInterruptionType.duck, focus),
       );
       await _flush();
 
+      expect(focus.calls, 0);
+      expect(_playCalls(fixture), 1);
       expect(fixture.playerA.volumes, volumes);
-      expect(
-        fixture.coordinator.snapshot.value.masterVolume,
-        snapshot.masterVolume,
-      );
-      expect(
-        fixture.coordinator.snapshot.value.musicVolume,
-        snapshot.musicVolume,
-      );
       expect(alerts.map((alert) => alert.code), [
         PlaybackAlertCode.interruptionStarted,
         PlaybackAlertCode.interruptionEnded,
       ]);
       await fixture.dispose();
+    });
+
+    for (final action in ['pause', 'stop']) {
+      test(
+        'queued begin followed by user $action never auto-resumes',
+        () async {
+          final fixture = _Fixture();
+          await fixture.start();
+          final focus = _FocusProbe();
+
+          final begin = fixture.coordinator.handleAudioSessionEvent(
+            const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+          );
+          final override = action == 'pause'
+              ? fixture.coordinator.pause()
+              : fixture.coordinator.stop();
+          await begin;
+          await override;
+          await fixture.coordinator.handleAudioSessionEvent(
+            _end(AudioInterruptionType.pause, focus),
+          );
+
+          expect(focus.calls, 0);
+          expect(_playCalls(fixture), 1);
+          await fixture.dispose();
+        },
+      );
+    }
+
+    test(
+      'explicit resume after queued begin prevents later auto-resume',
+      () async {
+        final fixture = _Fixture();
+        await fixture.start();
+        final focus = _FocusProbe();
+
+        final begin = fixture.coordinator.handleAudioSessionEvent(
+          const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+        );
+        final resume = fixture.coordinator.resume();
+        await Future.wait([begin, resume]);
+        await fixture.coordinator.handleAudioSessionEvent(
+          _end(AudioInterruptionType.pause, focus),
+        );
+
+        expect(focus.calls, 0);
+        expect(_playCalls(fixture), 2);
+        await fixture.dispose();
+      },
+    );
+
+    test('pause and duck overlap resumes only after pause end', () async {
+      final fixture = _Fixture();
+      await fixture.start();
+      final focus = _FocusProbe();
+
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.duck),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.duck, focus),
+      );
+      expect(_playCalls(fixture), 1);
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+
+      expect(focus.calls, 1);
+      expect(_playCalls(fixture), 2);
+      await fixture.dispose();
+    });
+
+    test('nested pauses do not resume between end events', () async {
+      final fixture = _Fixture();
+      await fixture.start();
+      final focus = _FocusProbe();
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+      );
+
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+      expect(focus.calls, 0);
+      expect(_playCalls(fixture), 1);
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+
+      expect(focus.calls, 1);
+      expect(_playCalls(fixture), 2);
+      await fixture.dispose();
+    });
+
+    test('overlapping unknown permanently cancels pause auto-resume', () async {
+      final fixture = _Fixture();
+      await fixture.start();
+      final focus = _FocusProbe();
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.unknown),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.unknown, focus),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+
+      expect(focus.calls, 0);
+      expect(_playCalls(fixture), 1);
+      await fixture.dispose();
+    });
+
+    test('orphan and repeated ends do nothing', () async {
+      final fixture = _Fixture();
+      await fixture.start();
+      final focus = _FocusProbe();
+      final alerts = <PlaybackAlert>[];
+      fixture.coordinator.alerts.listen(alerts.add);
+
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+      await fixture.coordinator.handleAudioSessionEvent(
+        _end(AudioInterruptionType.pause, focus),
+      );
+      await _flush();
+
+      expect(focus.calls, 1);
+      expect(_playCalls(fixture), 2);
+      expect(
+        alerts.where(
+          (alert) => alert.code == PlaybackAlertCode.interruptionEnded,
+        ),
+        hasLength(1),
+      );
+      await fixture.dispose();
+    });
+
+    test('focus false and throw alert without resuming', () async {
+      for (final focus in [
+        _FocusProbe(result: false),
+        _FocusProbe(error: StateError('focus')),
+      ]) {
+        final fixture = _Fixture();
+        await fixture.start();
+        final alerts = <PlaybackAlert>[];
+        fixture.coordinator.alerts.listen(alerts.add);
+        await fixture.coordinator.handleAudioSessionEvent(
+          const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+        );
+
+        await fixture.coordinator.handleAudioSessionEvent(
+          _end(AudioInterruptionType.pause, focus),
+        );
+        await _flush();
+
+        expect(focus.calls, 1);
+        expect(_playCalls(fixture), 1);
+        expect(alerts.last.code, PlaybackAlertCode.interruptionEnded);
+        await fixture.dispose();
+      }
     });
 
     test('route changes alert and never pause or stop', () async {
@@ -192,9 +289,31 @@ void main() {
   });
 }
 
+PlaybackInterruptionEnded _end(AudioInterruptionType type, _FocusProbe focus) =>
+    PlaybackInterruptionEnded(type, requestFocus: focus.call);
+
+int _playCalls(_Fixture fixture) =>
+    fixture.playerA.operations.where((operation) => operation == 'play').length;
+
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
+}
+
+final class _FocusProbe {
+  _FocusProbe({this.result = true, this.error});
+
+  final bool result;
+  final Object? error;
+  var calls = 0;
+
+  Future<bool> call() async {
+    calls++;
+    if (error case final error?) {
+      throw error;
+    }
+    return result;
+  }
 }
 
 final class _Fixture {

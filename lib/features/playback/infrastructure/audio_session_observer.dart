@@ -54,6 +54,7 @@ final class AudioSessionObserver {
 
   Future<void>? _startFuture;
   Future<void>? _disposeFuture;
+  Future<void> _eventTail = Future<void>.value();
   var _disposed = false;
 
   Future<void> start() => _startFuture ??= _start();
@@ -79,13 +80,13 @@ final class AudioSessionObserver {
       )
       ..add(
         _backend.becomingNoisyEventStream.listen(
-          (_) => unawaited(_dispatch(const PlaybackRouteChanged())),
+          (_) => _queueEvent(const PlaybackRouteChanged()),
           onError: _ignoreStreamError,
         ),
       )
       ..add(
         _backend.devicesChangedEventStream.listen(
-          (_) => unawaited(_dispatch(const PlaybackRouteChanged())),
+          (_) => _queueEvent(const PlaybackRouteChanged()),
           onError: _ignoreStreamError,
         ),
       );
@@ -93,22 +94,22 @@ final class AudioSessionObserver {
 
   void _handleInterruption(AudioInterruptionEvent event) {
     if (event.begin) {
-      unawaited(_dispatch(PlaybackInterruptionStarted(event.type)));
+      _queueEvent(PlaybackInterruptionStarted(event.type));
       return;
     }
-    unawaited(_finishInterruption(event.type));
+    _queueEvent(
+      PlaybackInterruptionEnded(
+        event.type,
+        requestFocus: () => _backend.setActive(true),
+      ),
+    );
   }
 
-  Future<void> _finishInterruption(AudioInterruptionType type) async {
-    var focusGranted = false;
-    try {
-      focusGranted = await _backend.setActive(true);
-    } on Object {
-      // The coordinator receives a denied result and publishes a typed alert.
+  void _queueEvent(PlaybackSessionEvent event) {
+    if (_disposed) {
+      return;
     }
-    await _dispatch(
-      PlaybackInterruptionEnded(type, focusGranted: focusGranted),
-    );
+    _eventTail = _eventTail.then((_) => _dispatch(event));
   }
 
   Future<void> _dispatch(PlaybackSessionEvent event) async {
@@ -128,14 +129,31 @@ final class AudioSessionObserver {
 
   Future<void> _dispose() async {
     _disposed = true;
+    Object? firstError;
+    StackTrace? firstStackTrace;
     try {
       await _startFuture;
-    } on Object {
-      // Startup owns and reports configuration failures.
+    } on Object catch (error, stackTrace) {
+      firstError = error;
+      firstStackTrace = stackTrace;
     }
     for (final subscription in _subscriptions) {
-      await subscription.cancel();
+      try {
+        await subscription.cancel();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
     }
     _subscriptions.clear();
+    try {
+      await _eventTail;
+    } on Object catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
+    }
   }
 }

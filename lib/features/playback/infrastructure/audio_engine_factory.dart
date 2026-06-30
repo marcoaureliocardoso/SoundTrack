@@ -139,7 +139,23 @@ final class _ObservedPlaybackPort implements LivePlaybackPort {
   Future<void> dispose() => _disposeFuture ??= _dispose();
 
   Future<void> _dispose() async {
-    await _observer.dispose();
-    await _coordinator.dispose();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    try {
+      await _observer.dispose();
+    } on Object catch (error, stackTrace) {
+      firstError = error;
+      firstStackTrace = stackTrace;
+    } finally {
+      try {
+        await _coordinator.dispose();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
+    }
   }
 }

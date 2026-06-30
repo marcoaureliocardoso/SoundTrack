@@ -23,7 +23,7 @@ void main() {
     },
   );
 
-  test('forwards interruption types and activates focus before end', () async {
+  test('end forwards lazy focus callback without requesting focus', () async {
     final backend = _FakeAudioSessionBackend();
     final events = <PlaybackSessionEvent>[];
     final observer = AudioSessionObserver(
@@ -32,89 +32,102 @@ void main() {
     );
     await observer.start();
 
-    backend.interruptions.add(
-      AudioInterruptionEvent(true, AudioInterruptionType.pause),
-    );
     backend.interruptions.add(
       AudioInterruptionEvent(false, AudioInterruptionType.pause),
     );
     await _flush();
 
-    expect(events.first, isA<PlaybackInterruptionStarted>());
-    expect((events.last as PlaybackInterruptionEnded).focusGranted, isTrue);
+    expect(backend.activeRequests, isEmpty);
+    final end = events.single as PlaybackInterruptionEnded;
+    expect(await end.requestFocus(), isTrue);
     expect(backend.activeRequests, [true]);
     await observer.dispose();
   });
 
-  test('focus failure is contained and forwarded as denied', () async {
-    final backend = _FakeAudioSessionBackend()
-      ..activeError = StateError('focus');
+  test('serializes platform events in arrival order', () async {
+    final backend = _FakeAudioSessionBackend();
+    final releaseFirst = Completer<void>();
     final events = <PlaybackSessionEvent>[];
-    final observer = AudioSessionObserver(
-      backend,
-      (event) async => events.add(event),
-    );
+    final observer = AudioSessionObserver(backend, (event) async {
+      events.add(event);
+      if (events.length == 1) {
+        await releaseFirst.future;
+      }
+    });
     await observer.start();
 
     backend.interruptions.add(
-      AudioInterruptionEvent(false, AudioInterruptionType.unknown),
+      AudioInterruptionEvent(true, AudioInterruptionType.pause),
     );
+    backend.noisy.add(null);
+    backend.devices.add(AudioDevicesChangedEvent());
     await _flush();
 
-    expect((events.single as PlaybackInterruptionEnded).focusGranted, isFalse);
+    expect(events, hasLength(1));
+    releaseFirst.complete();
+    await _flush();
+    expect(events, [
+      isA<PlaybackInterruptionStarted>(),
+      isA<PlaybackRouteChanged>(),
+      isA<PlaybackRouteChanged>(),
+    ]);
     await observer.dispose();
   });
 
-  test('noisy and device events become typed route changes', () async {
+  test('callback failure is contained and queue continues', () async {
     final backend = _FakeAudioSessionBackend();
     final events = <PlaybackSessionEvent>[];
-    final observer = AudioSessionObserver(
-      backend,
-      (event) async => events.add(event),
-    );
+    final observer = AudioSessionObserver(backend, (event) async {
+      events.add(event);
+      if (events.length == 1) {
+        throw StateError('consumer');
+      }
+    });
     await observer.start();
 
     backend.noisy.add(null);
     backend.devices.add(AudioDevicesChangedEvent());
     await _flush();
 
-    expect(events, everyElement(isA<PlaybackRouteChanged>()));
+    expect(events, hasLength(2));
     await observer.dispose();
   });
 
-  test('stream and callback errors are contained', () async {
+  test('dispose waits for queued event work', () async {
     final backend = _FakeAudioSessionBackend();
-    var callbacks = 0;
-    final observer = AudioSessionObserver(backend, (_) async {
-      callbacks++;
-      throw StateError('consumer');
-    });
+    final release = Completer<void>();
+    final observer = AudioSessionObserver(backend, (_) => release.future);
     await observer.start();
-
-    backend.noisy.addError(StateError('stream'));
     backend.noisy.add(null);
     await _flush();
 
-    expect(callbacks, 1);
-    await observer.dispose();
+    var disposed = false;
+    final disposal = observer.dispose()..then((_) => disposed = true);
+    await _flush();
+    expect(disposed, isFalse);
+
+    release.complete();
+    await disposal;
+    expect(disposed, isTrue);
   });
 
-  test('dispose cancels subscriptions and is idempotent', () async {
-    final backend = _FakeAudioSessionBackend();
-    final events = <PlaybackSessionEvent>[];
-    final observer = AudioSessionObserver(
-      backend,
-      (event) async => events.add(event),
+  test('dispose attempts every cancellation and reports first error', () async {
+    final backend = _FakeAudioSessionBackend(cancelFailures: {0, 2});
+    final observer = AudioSessionObserver(backend, (_) async {});
+    await observer.start();
+
+    await expectLater(
+      observer.dispose(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'cancel-0',
+        ),
+      ),
     );
-    await observer.start();
 
-    await Future.wait([observer.dispose(), observer.dispose()]);
-    backend.noisy.add(null);
-    await _flush();
-
-    expect(events, isEmpty);
     expect(backend.cancelCount, 3);
-    await backend.close();
   });
 }
 
@@ -124,37 +137,60 @@ Future<void> _flush() async {
 }
 
 final class _FakeAudioSessionBackend implements AudioSessionBackend {
-  final interruptions = StreamController<AudioInterruptionEvent>.broadcast();
-  final noisy = StreamController<void>.broadcast();
-  final devices = StreamController<AudioDevicesChangedEvent>.broadcast();
+  _FakeAudioSessionBackend({this.cancelFailures = const {}}) {
+    interruptions = _controller<AudioInterruptionEvent>(0);
+    noisy = _controller<void>(1);
+    devices = _controller<AudioDevicesChangedEvent>(2);
+  }
+
+  final Set<int> cancelFailures;
+  late final StreamController<AudioInterruptionEvent> interruptions;
+  late final StreamController<void> noisy;
+  late final StreamController<AudioDevicesChangedEvent> devices;
   final configurations = <AudioSessionConfiguration>[];
   final activeRequests = <bool>[];
 
-  Object? activeError;
   var interruptionListenCount = 0;
   var noisyListenCount = 0;
   var devicesListenCount = 0;
   var cancelCount = 0;
 
-  @override
-  Stream<AudioInterruptionEvent> get interruptionEventStream =>
-      _counted(interruptions.stream, () => interruptionListenCount++);
+  StreamController<T> _controller<T>(int index) {
+    return StreamController<T>.broadcast(
+      onListen: () {
+        switch (index) {
+          case 0:
+            interruptionListenCount++;
+          case 1:
+            noisyListenCount++;
+          case 2:
+            devicesListenCount++;
+        }
+      },
+    );
+  }
 
   @override
-  Stream<void> get becomingNoisyEventStream =>
-      _counted(noisy.stream, () => noisyListenCount++);
+  Stream<AudioInterruptionEvent> get interruptionEventStream =>
+      _cancelStream(interruptions.stream, 0);
+
+  @override
+  Stream<void> get becomingNoisyEventStream => _cancelStream(noisy.stream, 1);
 
   @override
   Stream<AudioDevicesChangedEvent> get devicesChangedEventStream =>
-      _counted(devices.stream, () => devicesListenCount++);
+      _cancelStream(devices.stream, 2);
 
-  Stream<T> _counted<T>(Stream<T> source, void Function() onListen) {
-    return source
-        .transform(StreamTransformer<T, T>.fromHandlers())
-        .asBroadcastStream(
-          onListen: (_) => onListen(),
-          onCancel: (_) => cancelCount++,
-        );
+  Stream<T> _cancelStream<T>(Stream<T> stream, int index) {
+    return _CancelFailingStream<T>(
+      stream,
+      onCancel: () {
+        cancelCount++;
+        if (cancelFailures.contains(index)) {
+          throw StateError('cancel-$index');
+        }
+      },
+    );
   }
 
   @override
@@ -165,13 +201,66 @@ final class _FakeAudioSessionBackend implements AudioSessionBackend {
   @override
   Future<bool> setActive(bool active) async {
     activeRequests.add(active);
-    final error = activeError;
-    if (error != null) {
-      throw error;
-    }
     return true;
   }
+}
 
-  Future<void> close() =>
-      Future.wait([interruptions.close(), noisy.close(), devices.close()]);
+final class _CancelFailingStream<T> extends Stream<T> {
+  _CancelFailingStream(this._delegate, {required this.onCancel});
+
+  final Stream<T> _delegate;
+  final void Function() onCancel;
+
+  @override
+  StreamSubscription<T> listen(
+    void Function(T event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _CancelFailingSubscription<T>(
+      _delegate.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: cancelOnError,
+      ),
+      onCancel,
+    );
+  }
+}
+
+final class _CancelFailingSubscription<T> implements StreamSubscription<T> {
+  _CancelFailingSubscription(this._delegate, this._onCancel);
+
+  final StreamSubscription<T> _delegate;
+  final void Function() _onCancel;
+
+  @override
+  Future<void> cancel() async {
+    await _delegate.cancel();
+    _onCancel();
+  }
+
+  @override
+  void onData(void Function(T data)? handleData) =>
+      _delegate.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _delegate.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _delegate.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _delegate.pause(resumeSignal);
+
+  @override
+  void resume() => _delegate.resume();
+
+  @override
+  bool get isPaused => _delegate.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _delegate.asFuture(futureValue);
 }
