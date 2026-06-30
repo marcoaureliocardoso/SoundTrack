@@ -4,6 +4,7 @@ import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
 
 import '../support/in_memory_event_repository.dart';
+import '../support/fake_live_playback_port.dart';
 
 void main() {
   testWidgets('opens the event library', (tester) async {
@@ -13,6 +14,7 @@ void main() {
           eventRepository: InMemoryEventRepository(),
           newEventId: () => 'event-1',
           newMomentId: () => 'moment-1',
+          playback: FakeLivePlaybackPort(),
         ),
       ),
     );

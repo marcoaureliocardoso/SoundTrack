@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -13,8 +12,6 @@ import '../features/events/data/event_repository.dart';
 import '../features/events/data/json_file_event_repository.dart';
 import '../features/events/domain/soundtrack_event.dart';
 import '../features/playback/application/live_playback_port.dart';
-import '../features/playback/domain/playback_alert.dart';
-import '../features/playback/domain/playback_snapshot.dart';
 import '../platform/documents/document_gateway.dart';
 import '../platform/documents/method_channel_document_gateway.dart';
 
@@ -23,10 +20,10 @@ class AppDependencies {
     required this.eventRepository,
     required this.newEventId,
     required this.newMomentId,
+    required this.playback,
     this.documentGateway = const MethodChannelDocumentGateway(),
     this.exportCodec = const EventExportCodec(),
     this.clock = DateTime.now,
-    this.playback = const _IdlePlaybackPort(),
   });
 
   final EventRepository eventRepository;
@@ -38,7 +35,7 @@ class AppDependencies {
   final LivePlaybackPort playback;
 
   static Future<AppDependencies> create({
-    LivePlaybackPort playback = const _IdlePlaybackPort(),
+    required LivePlaybackPort playback,
   }) async {
     final documents = await getApplicationDocumentsDirectory();
     final repository = JsonFileEventRepository(
@@ -82,57 +79,4 @@ class AppDependencies {
       clock: clock,
     );
   }
-}
-
-final class _IdlePlaybackPort implements LivePlaybackPort {
-  const _IdlePlaybackPort();
-
-  static const _snapshot = _IdlePlaybackSnapshot();
-
-  @override
-  ValueListenable<PlaybackSnapshot> get snapshot => _snapshot;
-
-  @override
-  Stream<PlaybackAlert> get alerts => const Stream<PlaybackAlert>.empty();
-
-  @override
-  Future<void> startMoment(MomentPlaybackRequest request) async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> resume() async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> setNarration(bool active) async {}
-
-  @override
-  Future<void> setSessionVolumes({
-    required double masterVolume,
-    required double musicVolume,
-    required double narrationVolume,
-  }) async {}
-
-  @override
-  Future<void> restorePresetVolumes() async {}
-
-  @override
-  Future<void> dispose() async {}
-}
-
-final class _IdlePlaybackSnapshot implements ValueListenable<PlaybackSnapshot> {
-  const _IdlePlaybackSnapshot();
-
-  @override
-  PlaybackSnapshot get value => const PlaybackSnapshot.idle();
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

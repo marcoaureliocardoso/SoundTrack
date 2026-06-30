@@ -30,7 +30,8 @@ final class SoundTrackAudioHandler extends BaseAudioHandler
   final _alerts = StreamController<PlaybackAlert>.broadcast();
   late final StreamSubscription<PlaybackAlert> _alertSubscription;
 
-  MomentPlaybackRequest? _activeRequest;
+  final _pendingRequests = <String, List<MomentPlaybackRequest>>{};
+  MomentPlaybackRequest? _confirmedRequest;
   Future<void>? _disposeFuture;
   bool _disposed = false;
 
@@ -50,9 +51,33 @@ final class SoundTrackAudioHandler extends BaseAudioHandler
     if (_disposed) {
       return;
     }
-    _activeRequest = request;
-    mediaItem.add(_mediaItemFor(request));
-    await _coordinator.startMoment(request);
+    final snapshotBefore = _coordinator.snapshot.value;
+    final confirmedBefore = _confirmedRequest;
+    if (snapshotBefore.activeMomentId == request.momentId &&
+        confirmedBefore?.momentId == request.momentId) {
+      await _coordinator.startMoment(request);
+      return;
+    }
+
+    final pending = _pendingRequests.putIfAbsent(request.momentId, () => []);
+    pending.add(request);
+    try {
+      await _coordinator.startMoment(request);
+    } finally {
+      pending.remove(request);
+      if (pending.isEmpty) {
+        _pendingRequests.remove(request.momentId);
+      }
+    }
+    if (_disposed ||
+        _pendingRequests.containsKey(request.momentId) ||
+        _coordinator.snapshot.value.activeMomentId != request.momentId) {
+      return;
+    }
+    _confirmedRequest = request;
+    mediaItem.add(
+      _mediaItemFor(request, duration: _coordinator.snapshot.value.duration),
+    );
   }
 
   @override
@@ -151,14 +176,14 @@ final class SoundTrackAudioHandler extends BaseAudioHandler
       ),
     );
 
-    final request = _activeRequest;
+    final request = _confirmedRequest;
     if (value.activeMomentId != null &&
         request != null &&
         value.activeMomentId == request.momentId) {
       mediaItem.add(_mediaItemFor(request, duration: value.duration));
     } else if (value.phase == PlaybackPhase.idle ||
         value.phase == PlaybackPhase.stopped) {
-      _activeRequest = null;
+      _confirmedRequest = null;
       mediaItem.add(null);
     }
   }
@@ -293,6 +318,7 @@ final class SoundTrackAudioHandler extends BaseAudioHandler
 
   Future<void> _dispose() async {
     _disposed = true;
+    _pendingRequests.clear();
     _coordinator.snapshot.removeListener(_publishSnapshot);
     await _alertSubscription.cancel();
     await _coordinator.dispose();

@@ -4,18 +4,24 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/playback/application/live_playback_port.dart';
+import 'package:soundtrack/features/playback/application/player_port.dart';
 import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 import 'package:soundtrack/features/playback/infrastructure/audio_engine_factory.dart';
 import 'package:soundtrack/features/playback/infrastructure/soundtrack_audio_handler.dart';
 import 'package:soundtrack/main.dart' as app;
 
+import '../../../support/fake_player_port.dart';
+
 void main() {
-  test('audio service config is valid for an ongoing notification', () {
-    expect(app.soundTrackAudioServiceConfig.androidNotificationOngoing, isTrue);
+  test('audio service config retains foreground playback while paused', () {
+    expect(
+      app.soundTrackAudioServiceConfig.androidNotificationOngoing,
+      isFalse,
+    );
     expect(
       app.soundTrackAudioServiceConfig.androidStopForegroundOnPause,
-      isTrue,
+      isFalse,
     );
   });
 
@@ -24,6 +30,49 @@ void main() {
 
     expect(builder, isNotNull);
   });
+
+  test(
+    'AudioEngineFactory cleans the first player if the second throws',
+    () async {
+      final first = FakePlayerPort();
+      final original = StateError('second player');
+      var calls = 0;
+      final factory = AudioEngineFactory(
+        createPlayer: () {
+          calls++;
+          if (calls == 2) {
+            throw original;
+          }
+          return first;
+        },
+      );
+
+      expect(factory.createHandler, throwsA(same(original)));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(first.disposeCalls, 1);
+    },
+  );
+
+  test(
+    'AudioEngineFactory cleans coordinator if handler creation throws',
+    () async {
+      final first = FakePlayerPort();
+      final second = FakePlayerPort();
+      final players = <PlayerPort>[first, second];
+      final original = StateError('handler');
+      final factory = AudioEngineFactory(
+        createPlayer: () => players.removeAt(0),
+        createHandler: (_) => throw original,
+      );
+
+      expect(factory.createHandler, throwsA(same(original)));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(first.disposeCalls, 1);
+      expect(second.disposeCalls, 1);
+    },
+  );
 
   group('SoundTrackAudioHandler', () {
     late _FakePlaybackCoordinator coordinator;
@@ -53,6 +102,122 @@ void main() {
         expect(request.fadeOut, const Duration(milliseconds: 2300));
         expect(handler.mediaItem.value?.title, 'Entrada');
         expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+      },
+    );
+
+    test(
+      'first media item is published only after coordinator confirmation',
+      () async {
+        final confirmation = Completer<void>();
+        coordinator.onStart = (request) async {
+          await confirmation.future;
+          coordinator.publish(
+            _snapshot(
+              phase: PlaybackPhase.playing,
+              playing: true,
+              activeMomentId: request.momentId,
+            ),
+          );
+        };
+
+        final start = handler.startMoment(_request());
+        await Future<void>.delayed(Duration.zero);
+        expect(handler.mediaItem.valueOrNull, isNull);
+
+        confirmation.complete();
+        await start;
+        expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+      },
+    );
+
+    test('failed replacement keeps confirmed media item', () async {
+      await handler.startMoment(_request());
+      final published = <String?>[];
+      final subscription = handler.mediaItem.listen(
+        (item) => published.add(item?.artist),
+      );
+      coordinator.onStart = (_) async {
+        coordinator.publish(
+          _snapshot(
+            phase: PlaybackPhase.loading,
+            playing: true,
+            activeMomentId: 'moment-1',
+          ),
+        );
+        coordinator.publish(
+          _snapshot(
+            phase: PlaybackPhase.playing,
+            playing: true,
+            activeMomentId: 'moment-1',
+          ),
+        );
+      };
+
+      await handler.startMoment(
+        _request(
+          momentId: 'moment-2',
+          momentName: 'Saída',
+          audioDisplayName: 'saida.mp3',
+        ),
+      );
+
+      expect(handler.mediaItem.value?.id, 'moment-1');
+      expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+      expect(published, isNot(contains('saida.mp3')));
+      await subscription.cancel();
+    });
+
+    test(
+      'same active moment does not replace metadata for skipped audio',
+      () async {
+        await handler.startMoment(_request());
+        coordinator.onStart = (_) async {};
+
+        await handler.startMoment(
+          _request(
+            momentName: 'Entrada alternativa',
+            audioDisplayName: 'alternativa.mp3',
+          ),
+        );
+
+        expect(handler.mediaItem.value?.title, 'Entrada');
+        expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+      },
+    );
+
+    test(
+      'concurrent same-id starts publish metadata for latest confirmation',
+      () async {
+        final firstReleased = Completer<void>();
+        final secondReleased = Completer<void>();
+        coordinator.onStart = (request) async {
+          if (request.audioDisplayName == 'first.mp3') {
+            await firstReleased.future;
+            return;
+          }
+          await secondReleased.future;
+          coordinator.publish(
+            _snapshot(
+              phase: PlaybackPhase.playing,
+              playing: true,
+              activeMomentId: request.momentId,
+            ),
+          );
+        };
+
+        final first = handler.startMoment(
+          _request(audioDisplayName: 'first.mp3'),
+        );
+        final second = handler.startMoment(
+          _request(audioDisplayName: 'second.mp3'),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(handler.mediaItem.valueOrNull, isNull);
+
+        firstReleased.complete();
+        secondReleased.complete();
+        await Future.wait([first, second]);
+        expect(handler.mediaItem.value?.artist, 'second.mp3');
       },
     );
 
@@ -195,11 +360,15 @@ MediaItem _mediaItem() => MediaItem(
   },
 );
 
-MomentPlaybackRequest _request() => MomentPlaybackRequest(
-  momentId: 'moment-1',
-  momentName: 'Entrada',
+MomentPlaybackRequest _request({
+  String momentId = 'moment-1',
+  String momentName = 'Entrada',
+  String audioDisplayName = 'entrada.mp3',
+}) => MomentPlaybackRequest(
+  momentId: momentId,
+  momentName: momentName,
   uri: Uri.parse('file:///music/entrada.mp3'),
-  audioDisplayName: 'entrada.mp3',
+  audioDisplayName: audioDisplayName,
   loop: true,
   narrationEnabled: false,
   gainDb: -3.5,
@@ -239,6 +408,7 @@ final class _FakePlaybackCoordinator implements LivePlaybackPort {
   var stopCalls = 0;
   var restoreCalls = 0;
   var disposeCalls = 0;
+  Future<void> Function(MomentPlaybackRequest request)? onStart;
 
   @override
   ValueListenable<PlaybackSnapshot> get snapshot => notifier;
@@ -251,6 +421,18 @@ final class _FakePlaybackCoordinator implements LivePlaybackPort {
   @override
   Future<void> startMoment(MomentPlaybackRequest request) async {
     started.add(request);
+    final callback = onStart;
+    if (callback != null) {
+      await callback(request);
+      return;
+    }
+    publish(
+      _snapshot(
+        phase: PlaybackPhase.playing,
+        playing: true,
+        activeMomentId: request.momentId,
+      ),
+    );
   }
 
   @override

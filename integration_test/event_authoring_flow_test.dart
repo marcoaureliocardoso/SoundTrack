@@ -9,6 +9,7 @@ import 'package:soundtrack/features/events/presentation/widgets/event_card.dart'
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
 import '../test/support/in_memory_event_repository.dart';
+import '../test/support/fake_live_playback_port.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,7 @@ void main() {
           eventRepository: InMemoryEventRepository(),
           newEventId: () => 'event-${++eventId}',
           newMomentId: () => 'moment-${++momentId}',
+          playback: FakeLivePlaybackPort(),
           documentGateway: gateway,
           clock: () => DateTime.utc(2026, 6, 29),
         ),
