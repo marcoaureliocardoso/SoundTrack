@@ -16,7 +16,12 @@ class MomentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final audioLabel = moment.audio?.displayName ?? 'Áudio não selecionado';
+    final audio = moment.audio;
+    final audioLabel = audio == null
+        ? 'Áudio não selecionado'
+        : audio.pending
+        ? 'Áudio pendente: ${audio.displayName}'
+        : audio.displayName;
     return Card(
       child: ListTile(
         onTap: onEdit,

@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../features/events/application/event_editor_controller.dart';
+import '../features/events/application/event_audio_availability_service.dart';
 import '../features/events/application/event_library_controller.dart';
 import '../features/events/application/event_transfer_controller.dart';
 import '../features/events/data/event_export_codec.dart';
@@ -44,9 +45,14 @@ class AppDependencies {
   }
 
   EventLibraryController createLibraryController() {
+    final audioAvailability = EventAudioAvailabilityService(
+      canRead: documentGateway.canRead,
+      probeAudio: documentGateway.probeAudio,
+    );
     return EventLibraryController(
       repository: eventRepository,
       newId: newEventId,
+      revalidateAudio: audioAvailability.revalidate,
     );
   }
 

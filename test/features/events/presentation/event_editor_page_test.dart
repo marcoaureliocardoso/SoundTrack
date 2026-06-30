@@ -184,6 +184,31 @@ void main() {
       isNull,
     );
   });
+
+  testWidgets('shows persisted audio as pending after revalidation', (
+    tester,
+  ) async {
+    final event = _validEvent();
+    final pendingEvent = event.copyWith(
+      moments: [
+        event.moments.single.copyWith(
+          audio: event.moments.single.audio!.markPending(),
+        ),
+      ],
+    );
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository([pendingEvent]),
+      initial: pendingEvent,
+      newId: () => 'unused',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+
+    expect(find.text('Áudio pendente: Entrada.mp3 • Loop'), findsOneWidget);
+    expect(find.text('Entrada.mp3 • Loop'), findsNothing);
+  });
 }
 
 SoundTrackEvent _validEvent() {

@@ -92,6 +92,26 @@ void main() {
     );
   });
 
+  test('marks a reference pending without changing its metadata', () {
+    const source = AudioReference(
+      uri: 'content://provider/audio/3',
+      displayName: 'entrada.mp3',
+      pending: false,
+      artist: 'Artista',
+      duration: Duration(seconds: 90),
+    );
+
+    final pending = source.markPending();
+
+    expect(pending, isNot(same(source)));
+    expect(pending.pending, isTrue);
+    expect(pending.uri, source.uri);
+    expect(pending.displayName, source.displayName);
+    expect(pending.artist, source.artist);
+    expect(pending.duration, source.duration);
+    expect(source.pending, isFalse);
+  });
+
   test('round trips uri, artist, and duration through json', () {
     const original = AudioReference(
       uri: 'content://provider/audio/3',

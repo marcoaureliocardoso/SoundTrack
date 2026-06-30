@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/events/application/event_library_controller.dart';
+import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
@@ -65,6 +66,68 @@ void main() {
       expect(controller.loading, isFalse);
       expect(controller.error, same(error));
       expect(controller.events, isEmpty);
+    });
+
+    test(
+      'load persists and exposes an event changed by revalidation',
+      () async {
+        final event = SoundTrackEvent.create(id: 'event', name: 'Evento')
+            .copyWith(
+              moments: [
+                EventMoment.create(
+                  id: 'moment',
+                  position: 0,
+                  name: 'Entrada',
+                ).copyWith(
+                  audio: const AudioReference(
+                    uri: 'content://audio/entry',
+                    displayName: 'entrada.ogg',
+                    pending: false,
+                    artist: null,
+                    duration: null,
+                  ),
+                ),
+              ],
+            );
+        final repository = _CountingSaveRepository([event]);
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'new',
+          revalidateAudio: (events) async => [
+            events.single.copyWith(
+              moments: [
+                events.single.moments.single.copyWith(
+                  audio: events.single.moments.single.audio!.markPending(),
+                ),
+              ],
+            ),
+          ],
+        );
+
+        await controller.load();
+
+        expect(controller.events.single.moments.single.audio!.pending, isTrue);
+        expect(
+          (await repository.findById('event'))!.moments.single.audio!.pending,
+          isTrue,
+        );
+        expect(repository.saveCalls, 1);
+      },
+    );
+
+    test('load does not save events unchanged by revalidation', () async {
+      final event = SoundTrackEvent.create(id: 'event', name: 'Evento');
+      final repository = _CountingSaveRepository([event]);
+      final controller = EventLibraryController(
+        repository: repository,
+        newId: () => 'new',
+        revalidateAudio: (events) async => events,
+      );
+
+      await controller.load();
+
+      expect(controller.events.single, same(event));
+      expect(repository.saveCalls, 0);
     });
 
     test('CRUD errors are exposed, notified, and rethrown', () async {
@@ -317,6 +380,18 @@ class _SequencedSaveRepository extends InMemoryEventRepository {
       secondSaveStarted.complete();
       await secondSaveGate.future;
     }
+    await super.save(event);
+  }
+}
+
+class _CountingSaveRepository extends InMemoryEventRepository {
+  _CountingSaveRepository(super.initialEvents);
+
+  int saveCalls = 0;
+
+  @override
+  Future<void> save(SoundTrackEvent event) async {
+    saveCalls++;
     await super.save(event);
   }
 }

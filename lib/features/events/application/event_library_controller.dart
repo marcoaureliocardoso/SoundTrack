@@ -5,18 +5,31 @@ import 'package:flutter/foundation.dart';
 import '../data/event_repository.dart';
 import '../domain/soundtrack_event.dart';
 
+typedef RevalidateEventAudio =
+    Future<List<SoundTrackEvent>> Function(List<SoundTrackEvent> events);
+
 class EventLibraryController extends ChangeNotifier {
   factory EventLibraryController({
     required EventRepository repository,
     required String Function() newId,
+    RevalidateEventAudio? revalidateAudio,
   }) {
-    return EventLibraryController._(repository, newId);
+    return EventLibraryController._(
+      repository,
+      newId,
+      revalidateAudio ?? _identityRevalidation,
+    );
   }
 
-  EventLibraryController._(this._repository, this._newId);
+  EventLibraryController._(
+    this._repository,
+    this._newId,
+    this._revalidateAudio,
+  );
 
   final EventRepository _repository;
   final String Function() _newId;
+  final RevalidateEventAudio _revalidateAudio;
 
   List<SoundTrackEvent> _events = const [];
   bool _loading = false;
@@ -36,7 +49,20 @@ class EventLibraryController extends ChangeNotifier {
         if (_disposed) {
           return;
         }
-        _events = _ordered(events);
+        final revalidated = await _revalidateAudio(events);
+        if (_disposed) {
+          return;
+        }
+        for (var index = 0; index < events.length; index++) {
+          final event = revalidated[index];
+          if (!identical(event, events[index])) {
+            await _repository.save(event);
+          }
+        }
+        if (_disposed) {
+          return;
+        }
+        _events = _ordered(revalidated);
         _error = null;
       } catch (error) {
         if (!_disposed) {
@@ -167,4 +193,10 @@ class EventLibraryController extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
+}
+
+Future<List<SoundTrackEvent>> _identityRevalidation(
+  List<SoundTrackEvent> events,
+) async {
+  return events;
 }

@@ -57,4 +57,18 @@ class AudioReference {
       duration: duration,
     );
   }
+
+  AudioReference markPending() {
+    if (pending) {
+      return this;
+    }
+
+    return AudioReference(
+      uri: uri,
+      displayName: displayName,
+      pending: true,
+      artist: artist,
+      duration: duration,
+    );
+  }
 }
