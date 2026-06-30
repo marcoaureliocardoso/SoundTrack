@@ -13,5 +13,13 @@ void main() {
     test('clamps amplified volume to one', () {
       expect(effectiveVolume(master: 1, modeVolume: 1, gainDb: 6), 1);
     });
+
+    test('fails safe for non-finite inputs', () {
+      expect(
+        effectiveVolume(master: 0, modeVolume: 1, gainDb: double.infinity),
+        0,
+      );
+      expect(effectiveVolume(master: double.nan, modeVolume: 1, gainDb: 0), 0);
+    });
   });
 }

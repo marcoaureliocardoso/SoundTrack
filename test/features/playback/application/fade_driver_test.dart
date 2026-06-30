@@ -12,6 +12,35 @@ void main() {
 
       expect(fractions, [1]);
     });
+
+    test('keeps producing fractions while the listener is paused', () async {
+      final stopwatch = Stopwatch()..start();
+      final fractions = <double>[];
+      final done = Completer<void>();
+      late final StreamSubscription<double> subscription;
+
+      subscription = const TimerFadeScheduler()
+          .fractions(const Duration(milliseconds: 400))
+          .listen((fraction) {
+            fractions.add(fraction);
+            if (fractions.length == 1) {
+              subscription.pause(
+                Future<void>.delayed(const Duration(milliseconds: 450)),
+              );
+            }
+          }, onDone: done.complete);
+
+      await done.future.timeout(const Duration(seconds: 2));
+      stopwatch.stop();
+
+      expect(fractions, hasLength(8));
+      expect(fractions.last, 1);
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(milliseconds: 700)),
+        reason: 'scheduler timing must not include listener backpressure',
+      );
+    });
   });
 
   group('FadeDriver', () {
@@ -94,6 +123,140 @@ void main() {
 
       expect(applied, [0.5]);
     });
+
+    test('serializes apply callbacks across generations', () async {
+      final scheduler = _QueuedFadeScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+      final firstApplyStarted = Completer<void>();
+      final releaseFirstApply = Completer<void>();
+      final applied = <String>[];
+      var activeCallbacks = 0;
+      var maxActiveCallbacks = 0;
+
+      final first = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {
+          activeCallbacks++;
+          if (activeCallbacks > maxActiveCallbacks) {
+            maxActiveCallbacks = activeCallbacks;
+          }
+          firstApplyStarted.complete();
+          await releaseFirstApply.future;
+          applied.add('A:$value');
+          activeCallbacks--;
+        },
+      );
+      scheduler.first.emit(0.5);
+      await firstApplyStarted.future;
+
+      final second = driver.run(
+        from: 0.5,
+        to: 0,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {
+          activeCallbacks++;
+          if (activeCallbacks > maxActiveCallbacks) {
+            maxActiveCallbacks = activeCallbacks;
+          }
+          applied.add('B:$value');
+          activeCallbacks--;
+        },
+      );
+      scheduler.second.emit(1);
+      await _flushEventQueue();
+
+      final firstClose = scheduler.first.close();
+      final secondClose = scheduler.second.close();
+      releaseFirstApply.complete();
+      await Future.wait([
+        first,
+        second,
+        firstClose,
+        secondClose,
+      ]).timeout(const Duration(seconds: 1));
+
+      expect(maxActiveCallbacks, 1);
+      expect(applied, ['A:0.5', 'B:0.0']);
+    });
+
+    test('skips stale apply work that has not started', () async {
+      final scheduler = _ThreeFadeScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+      final firstApplyStarted = Completer<void>();
+      final releaseFirstApply = Completer<void>();
+      final applied = <String>[];
+
+      final first = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {
+          firstApplyStarted.complete();
+          await releaseFirstApply.future;
+          applied.add('A');
+        },
+      );
+      scheduler.first.emit(0.5);
+      await firstApplyStarted.future;
+
+      final second = driver.run(
+        from: 0.5,
+        to: 0.25,
+        duration: const Duration(seconds: 1),
+        apply: (value) async => applied.add('B'),
+      );
+      scheduler.second.emit(1);
+      await _flushEventQueue();
+
+      final third = driver.run(
+        from: 0.5,
+        to: 0,
+        duration: const Duration(seconds: 1),
+        apply: (value) async => applied.add('C'),
+      );
+      scheduler.third.emit(1);
+      await _flushEventQueue();
+
+      final closes = [
+        scheduler.first.close(),
+        scheduler.second.close(),
+        scheduler.third.close(),
+      ];
+      releaseFirstApply.complete();
+      await Future.wait([
+        first,
+        second,
+        third,
+        ...closes,
+      ]).timeout(const Duration(seconds: 1));
+
+      expect(applied, ['A', 'C']);
+    });
+
+    test('cancel completes a fade whose scheduler stays silent', () async {
+      final scheduler = _ManualFadeScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+      final fade = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {},
+      );
+
+      driver.cancel();
+
+      try {
+        await expectLater(
+          fade.timeout(const Duration(milliseconds: 200)),
+          completes,
+        );
+        expect(scheduler.hasListener, isFalse);
+      } finally {
+        await scheduler.close();
+      }
+    });
   });
 }
 
@@ -107,6 +270,8 @@ Future<void> _flushEventQueue() => Future<void>.delayed(Duration.zero);
 
 class _ManualFadeScheduler implements FadeScheduler {
   final _controller = StreamController<double>();
+
+  bool get hasListener => _controller.hasListener;
 
   @override
   Stream<double> fractions(Duration duration) => _controller.stream;
@@ -125,5 +290,22 @@ class _QueuedFadeScheduler implements FadeScheduler {
   Stream<double> fractions(Duration duration) {
     _calls++;
     return _calls == 1 ? first.fractions(duration) : second.fractions(duration);
+  }
+}
+
+class _ThreeFadeScheduler implements FadeScheduler {
+  final first = _ManualFadeScheduler();
+  final second = _ManualFadeScheduler();
+  final third = _ManualFadeScheduler();
+  var _calls = 0;
+
+  @override
+  Stream<double> fractions(Duration duration) {
+    _calls++;
+    return switch (_calls) {
+      1 => first.fractions(duration),
+      2 => second.fractions(duration),
+      _ => third.fractions(duration),
+    };
   }
 }
