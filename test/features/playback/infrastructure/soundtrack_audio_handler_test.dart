@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/playback/application/live_playback_port.dart';
@@ -8,6 +9,7 @@ import 'package:soundtrack/features/playback/application/player_port.dart';
 import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 import 'package:soundtrack/features/playback/infrastructure/audio_engine_factory.dart';
+import 'package:soundtrack/features/playback/infrastructure/audio_session_observer.dart';
 import 'package:soundtrack/features/playback/infrastructure/soundtrack_audio_handler.dart';
 import 'package:soundtrack/main.dart' as app;
 
@@ -25,11 +27,20 @@ void main() {
     );
   });
 
-  test('AudioEngineFactory exposes an AudioService-compatible builder', () {
-    final AudioHandler Function() builder = AudioEngineFactory.buildHandler;
+  test(
+    'AudioEngineFactory prepares a configured observer before handler',
+    () async {
+      final backend = _FactoryAudioSessionBackend();
+      final factory = AudioEngineFactory(loadAudioSession: () async => backend);
 
-    expect(builder, isNotNull);
-  });
+      final handler = await factory.prepareHandler();
+
+      expect(backend.configurations, hasLength(1));
+      expect(backend.configurations.single.androidWillPauseWhenDucked, isFalse);
+      await handler.dispose();
+      expect(backend.cancelCount, 3);
+    },
+  );
 
   test(
     'AudioEngineFactory cleans the first player if the second throws',
@@ -47,8 +58,7 @@ void main() {
         },
       );
 
-      expect(factory.createHandler, throwsA(same(original)));
-      await Future<void>.delayed(Duration.zero);
+      await expectLater(factory.prepareHandler(), throwsA(same(original)));
 
       expect(first.disposeCalls, 1);
     },
@@ -63,11 +73,11 @@ void main() {
       final original = StateError('handler');
       final factory = AudioEngineFactory(
         createPlayer: () => players.removeAt(0),
+        loadAudioSession: () async => _FactoryAudioSessionBackend(),
         createHandler: (_) => throw original,
       );
 
-      expect(factory.createHandler, throwsA(same(original)));
-      await Future<void>.delayed(Duration.zero);
+      await expectLater(factory.prepareHandler(), throwsA(same(original)));
 
       expect(first.disposeCalls, 1);
       expect(second.disposeCalls, 1);
@@ -342,6 +352,37 @@ void main() {
       await subscription.cancel();
     });
   });
+}
+
+final class _FactoryAudioSessionBackend implements AudioSessionBackend {
+  final configurations = <AudioSessionConfiguration>[];
+  final _interruptions = StreamController<AudioInterruptionEvent>.broadcast();
+  final _noisy = StreamController<void>.broadcast();
+  final _devices = StreamController<AudioDevicesChangedEvent>.broadcast();
+  var cancelCount = 0;
+
+  @override
+  Stream<AudioInterruptionEvent> get interruptionEventStream =>
+      _countCancellation(_interruptions.stream);
+
+  @override
+  Stream<void> get becomingNoisyEventStream =>
+      _countCancellation(_noisy.stream);
+
+  @override
+  Stream<AudioDevicesChangedEvent> get devicesChangedEventStream =>
+      _countCancellation(_devices.stream);
+
+  Stream<T> _countCancellation<T>(Stream<T> stream) =>
+      stream.asBroadcastStream(onCancel: (_) => cancelCount++);
+
+  @override
+  Future<void> configure(AudioSessionConfiguration configuration) async {
+    configurations.add(configuration);
+  }
+
+  @override
+  Future<bool> setActive(bool active) async => true;
 }
 
 MediaItem _mediaItem() => MediaItem(

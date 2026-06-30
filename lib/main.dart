@@ -4,6 +4,7 @@ import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
 import 'package:soundtrack/features/playback/application/live_playback_port.dart';
 import 'package:soundtrack/features/playback/infrastructure/audio_engine_factory.dart';
+import 'package:soundtrack/features/playback/infrastructure/soundtrack_audio_handler.dart';
 
 const soundTrackAudioServiceConfig = AudioServiceConfig(
   androidNotificationChannelId: 'com.soundtrack.playback',
@@ -44,11 +45,16 @@ Future<Widget> initializeSoundTrackApp({
 }
 
 Future<LivePlaybackPort> _initializeAudio() async {
-  final handler = await AudioService.init(
-    builder: AudioEngineFactory.buildHandler,
-    config: soundTrackAudioServiceConfig,
-  );
-  return handler;
+  final prepared = await AudioEngineFactory().prepareHandler();
+  try {
+    return await AudioService.init<SoundTrackAudioHandler>(
+      builder: () => prepared,
+      config: soundTrackAudioServiceConfig,
+    );
+  } on Object {
+    await prepared.dispose();
+    rethrow;
+  }
 }
 
 Future<AppDependencies> _createDependencies(LivePlaybackPort playback) {

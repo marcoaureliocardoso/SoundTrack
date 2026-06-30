@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../events/domain/event_audio_settings.dart';
@@ -9,6 +10,27 @@ import '../domain/volume_policy.dart';
 import 'fade_driver.dart';
 import 'live_playback_port.dart';
 import 'player_port.dart';
+
+sealed class PlaybackSessionEvent {
+  const PlaybackSessionEvent();
+}
+
+final class PlaybackInterruptionStarted extends PlaybackSessionEvent {
+  const PlaybackInterruptionStarted(this.type);
+
+  final AudioInterruptionType type;
+}
+
+final class PlaybackInterruptionEnded extends PlaybackSessionEvent {
+  const PlaybackInterruptionEnded(this.type, {required this.focusGranted});
+
+  final AudioInterruptionType type;
+  final bool focusGranted;
+}
+
+final class PlaybackRouteChanged extends PlaybackSessionEvent {
+  const PlaybackRouteChanged();
+}
 
 final class PlaybackCoordinator implements LivePlaybackPort {
   factory PlaybackCoordinator({
@@ -75,6 +97,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   var _requestGeneration = 0;
   var _activeNarration = false;
   var _pendingStops = 0;
+  var _resumeAfterInterruption = false;
   var _disposed = false;
   Future<void>? _disposeFuture;
 
@@ -235,14 +258,17 @@ final class PlaybackCoordinator implements LivePlaybackPort {
   }
 
   @override
-  Future<void> pause() => _enqueueIfAlive(() async {
-    final active = _active;
-    if (_disposed || active == null) {
-      return;
-    }
-    await active.pause();
-    _publish(phase: PlaybackPhase.paused, playing: false);
-  });
+  Future<void> pause() {
+    _resumeAfterInterruption = false;
+    return _enqueueIfAlive(() async {
+      final active = _active;
+      if (_disposed || active == null) {
+        return;
+      }
+      await active.pause();
+      _publish(phase: PlaybackPhase.paused, playing: false);
+    });
+  }
 
   @override
   Future<void> resume() => _enqueueIfAlive(() async {
@@ -256,6 +282,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
 
   @override
   Future<void> stop() {
+    _resumeAfterInterruption = false;
     if (_disposed) {
       return Future<void>.value();
     }
@@ -337,6 +364,71 @@ final class PlaybackCoordinator implements LivePlaybackPort {
     musicVolume: _presetVolumes.musicVolume,
     narrationVolume: _presetVolumes.narrationVolume,
   );
+
+  Future<void> handleAudioSessionEvent(PlaybackSessionEvent event) {
+    return _enqueueIfAlive(() async {
+      switch (event) {
+        case PlaybackInterruptionStarted(:final type):
+          _resumeAfterInterruption =
+              type != AudioInterruptionType.duck && _snapshot.value.playing;
+          _emitAlert(
+            PlaybackAlert(
+              PlaybackAlertCode.interruptionStarted,
+              type == AudioInterruptionType.duck
+                  ? 'Outro áudio solicitou redução temporária de volume.'
+                  : 'A reprodução foi interrompida pelo sistema.',
+              momentId: _activeRequest?.momentId,
+            ),
+          );
+        case PlaybackInterruptionEnded(:final type, :final focusGranted):
+          final shouldResume = _resumeAfterInterruption;
+          _resumeAfterInterruption = false;
+          if (!focusGranted) {
+            _emitAlert(
+              PlaybackAlert(
+                PlaybackAlertCode.interruptionEnded,
+                'A interrupção terminou, mas o foco de áudio não foi concedido.',
+                momentId: _activeRequest?.momentId,
+              ),
+            );
+            return;
+          }
+          if (shouldResume && type != AudioInterruptionType.duck) {
+            try {
+              _active?.play();
+              if (_active != null) {
+                _publish(phase: PlaybackPhase.playing, playing: true);
+              }
+            } on Object catch (error) {
+              _emitAlert(
+                PlaybackAlert(
+                  PlaybackAlertCode.sourceFailed,
+                  'Não foi possível retomar a reprodução: $error',
+                  momentId: _activeRequest?.momentId,
+                ),
+              );
+            }
+          }
+          _emitAlert(
+            PlaybackAlert(
+              PlaybackAlertCode.interruptionEnded,
+              type == AudioInterruptionType.duck
+                  ? 'A redução temporária de volume terminou.'
+                  : 'A interrupção de áudio terminou.',
+              momentId: _activeRequest?.momentId,
+            ),
+          );
+        case PlaybackRouteChanged():
+          _emitAlert(
+            PlaybackAlert(
+              PlaybackAlertCode.routeChanged,
+              'A rota de áudio conectada mudou.',
+              momentId: _activeRequest?.momentId,
+            ),
+          );
+      }
+    });
+  }
 
   double _effectiveVolume(
     MomentPlaybackRequest request, {

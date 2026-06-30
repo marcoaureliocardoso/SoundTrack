@@ -37,3 +37,14 @@ flutter test integration_test\event_authoring_flow_test.dart -d emulator-5554
 O teste de integração precisa de um dispositivo Android ativo. O checklist e as
 evidências manuais da fundação ficam em
 [`docs/qa/foundation-checklist.md`](docs/qa/foundation-checklist.md).
+
+## Continuidade de áudio
+
+No Android 12 e versões posteriores, o sistema pode impor fade ou silenciar o
+áudio durante perda de foco e chamadas. O SoundTrack preserva o estado da
+reprodução e tenta retomá-la quando o foco retorna, desde que o usuário não
+tenha escolhido Pausar ou Parar durante a interrupção.
+
+Conectar ou desconectar Bluetooth, fones ou cabos apenas gera um aviso de
+mudança de rota; o SoundTrack não pausa automaticamente. Pedidos de ducking
+também são observados e avisados sem alterar manualmente os volumes da sessão.
