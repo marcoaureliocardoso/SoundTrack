@@ -63,6 +63,39 @@ void main() {
       expect(applied, closeToList([0.35, 0.8]));
     });
 
+    test('coalesces ticks received while apply is in flight', () async {
+      final scheduler = _ManualFadeScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+      final firstApplyStarted = Completer<void>();
+      final releaseFirstApply = Completer<void>();
+      final applied = <double>[];
+
+      final fade = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {
+          applied.add(value);
+          if (!firstApplyStarted.isCompleted) {
+            firstApplyStarted.complete();
+            await releaseFirstApply.future;
+          }
+        },
+      );
+      scheduler.emit(0.1);
+      await firstApplyStarted.future;
+
+      scheduler.emit(0.25);
+      scheduler.emit(0.5);
+      scheduler.emit(1);
+      final close = scheduler.close();
+      await _flushEventQueue();
+      releaseFirstApply.complete();
+      await Future.wait([fade, close]).timeout(const Duration(seconds: 1));
+
+      expect(applied, [0.1, 1]);
+    });
+
     test('starting a new fade cancels the previous generation', () async {
       final scheduler = _QueuedFadeScheduler();
       final driver = FadeDriver(scheduler: scheduler);
@@ -166,6 +199,14 @@ void main() {
       );
       scheduler.second.emit(1);
       await _flushEventQueue();
+      var firstCompletedBeforeRelease = false;
+      unawaited(
+        first.then((_) {
+          firstCompletedBeforeRelease = true;
+        }),
+      );
+      await _flushEventQueue();
+      final completedBeforeRelease = firstCompletedBeforeRelease;
 
       final firstClose = scheduler.first.close();
       final secondClose = scheduler.second.close();
@@ -179,6 +220,7 @@ void main() {
 
       expect(maxActiveCallbacks, 1);
       expect(applied, ['A:0.5', 'B:0.0']);
+      expect(completedBeforeRelease, isFalse);
     });
 
     test('skips stale apply work that has not started', () async {
@@ -257,6 +299,85 @@ void main() {
         await scheduler.close();
       }
     });
+
+    test('cancel waits for subscription and in-flight apply', () async {
+      final scheduler = _ControlledCancelScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+      final applyStarted = Completer<void>();
+      final releaseApply = Completer<void>();
+      var fadeCompleted = false;
+
+      final fade = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async {
+          applyStarted.complete();
+          await releaseApply.future;
+        },
+      );
+      unawaited(
+        fade.then((_) {
+          fadeCompleted = true;
+        }),
+      );
+      scheduler.emit(0.5);
+      await applyStarted.future;
+
+      driver.cancel();
+      await scheduler.cancelStarted.future;
+      await _flushEventQueue();
+      final completedBeforeApply = fadeCompleted;
+
+      releaseApply.complete();
+      await _flushEventQueue();
+      final completedBeforeSubscription = fadeCompleted;
+
+      scheduler.releaseCancellation();
+      await fade.timeout(const Duration(seconds: 1));
+
+      expect(completedBeforeApply, isFalse);
+      expect(completedBeforeSubscription, isFalse);
+      expect(scheduler.hasListener, isFalse);
+    });
+
+    test('apply error reaches run without poisoning a later fade', () async {
+      final scheduler = _QueuedFadeScheduler();
+      final driver = FadeDriver(scheduler: scheduler);
+
+      final failedFade = driver.run(
+        from: 0,
+        to: 1,
+        duration: const Duration(seconds: 1),
+        apply: (value) async => throw StateError('apply failed'),
+      );
+      scheduler.first.emit(1);
+
+      await expectLater(
+        failedFade.timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'apply failed',
+          ),
+        ),
+      );
+      await scheduler.first.close();
+
+      final applied = <double>[];
+      final nextFade = driver.run(
+        from: 1,
+        to: 0,
+        duration: const Duration(seconds: 1),
+        apply: (value) async => applied.add(value),
+      );
+      scheduler.second.emit(1);
+      await scheduler.second.close();
+      await nextFade.timeout(const Duration(seconds: 1));
+
+      expect(applied, [0]);
+    });
   });
 }
 
@@ -308,4 +429,28 @@ class _ThreeFadeScheduler implements FadeScheduler {
       _ => third.fractions(duration),
     };
   }
+}
+
+class _ControlledCancelScheduler implements FadeScheduler {
+  _ControlledCancelScheduler() {
+    _controller = StreamController<double>(
+      onCancel: () {
+        cancelStarted.complete();
+        return _cancelReleased.future;
+      },
+    );
+  }
+
+  final cancelStarted = Completer<void>();
+  final _cancelReleased = Completer<void>();
+  late final StreamController<double> _controller;
+
+  bool get hasListener => _controller.hasListener;
+
+  @override
+  Stream<double> fractions(Duration duration) => _controller.stream;
+
+  void emit(double fraction) => _controller.add(fraction);
+
+  void releaseCancellation() => _cancelReleased.complete();
 }

@@ -55,40 +55,23 @@ final class FadeDriver {
     required Future<void> Function(double value) apply,
   }) async {
     final generation = ++_generation;
-    _activeRun?.cancel();
-    final fadeRun = _FadeRun();
+    final previousRun = _activeRun;
+    if (previousRun != null) {
+      unawaited(previousRun.cancel());
+    }
+    final fadeRun = _FadeRun(
+      applyValue: (value) =>
+          _enqueueApply(generation: generation, value: value, apply: apply),
+    );
     _activeRun = fadeRun;
-    late final StreamSubscription<double> subscription;
-    subscription = _scheduler
+    final subscription = _scheduler
         .fractions(duration)
         .listen(
           (fraction) {
-            subscription.pause();
-            unawaited(
-              _enqueueApply(
-                generation: generation,
-                value: from + ((to - from) * fraction),
-                apply: apply,
-              ).then(
-                (_) {
-                  if (!fadeRun.isComplete && generation == _generation) {
-                    subscription.resume();
-                  }
-                },
-                onError: (Object error, StackTrace stackTrace) {
-                  if (!fadeRun.isComplete) {
-                    fadeRun.completeError(error, stackTrace);
-                    unawaited(subscription.cancel());
-                  }
-                },
-              ),
-            );
+            fadeRun.add(from + ((to - from) * fraction));
           },
-          onError: (Object error, StackTrace stackTrace) {
-            fadeRun.completeError(error, stackTrace);
-          },
-          onDone: fadeRun.complete,
-          cancelOnError: true,
+          onError: fadeRun.addError,
+          onDone: fadeRun.closeInput,
         );
     fadeRun.attach(subscription);
 
@@ -105,7 +88,9 @@ final class FadeDriver {
     _generation++;
     final activeRun = _activeRun;
     _activeRun = null;
-    activeRun?.cancel();
+    if (activeRun != null) {
+      unawaited(activeRun.cancel());
+    }
   }
 
   Future<void> _enqueueApply({
@@ -114,6 +99,7 @@ final class FadeDriver {
     required Future<void> Function(double value) apply,
   }) {
     final result = Completer<void>();
+    // An apply callback must not await another run on this same serial driver.
     _applyTail = _applyTail.then((_) async {
       if (generation != _generation) {
         result.complete();
@@ -131,37 +117,126 @@ final class FadeDriver {
 }
 
 final class _FadeRun {
+  _FadeRun({required Future<void> Function(double value) applyValue})
+    : this._(applyValue);
+
+  _FadeRun._(this._applyValue);
+
+  final Future<void> Function(double value) _applyValue;
   final _completion = Completer<void>();
   StreamSubscription<double>? _subscription;
+  double? _latestPending;
+  Object? _error;
+  StackTrace? _errorStackTrace;
+  var _draining = false;
+  var _inputDone = false;
+  var _stopRequested = false;
+  var _cancellationStarted = false;
 
   Future<void> get done => _completion.future;
 
-  bool get isComplete => _completion.isCompleted;
-
   void attach(StreamSubscription<double> subscription) {
     _subscription = subscription;
-    if (isComplete) {
-      unawaited(subscription.cancel());
+    if (_stopRequested && !_inputDone) {
+      _startSubscriptionCancellation(subscription);
     }
   }
 
-  void complete() {
-    if (!isComplete) {
-      _completion.complete();
+  void add(double value) {
+    if (_stopRequested || _completion.isCompleted) {
+      return;
+    }
+    _latestPending = value;
+    if (!_draining) {
+      _draining = true;
+      unawaited(_drain());
     }
   }
 
-  void completeError(Object error, StackTrace stackTrace) {
-    if (!isComplete) {
-      _completion.completeError(error, stackTrace);
+  void addError(Object error, StackTrace stackTrace) {
+    _recordError(error, stackTrace);
+    _requestStop();
+  }
+
+  void closeInput() {
+    if (_cancellationStarted) {
+      return;
+    }
+    _inputDone = true;
+    _maybeComplete();
+  }
+
+  Future<void> cancel() {
+    _requestStop();
+    return done;
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (!_stopRequested) {
+        final value = _latestPending;
+        if (value == null) {
+          break;
+        }
+        _latestPending = null;
+        try {
+          await _applyValue(value);
+        } on Object catch (error, stackTrace) {
+          _recordError(error, stackTrace);
+          _requestStop();
+        }
+      }
+    } finally {
+      _draining = false;
+      _maybeComplete();
     }
   }
 
-  void cancel() {
-    complete();
+  void _requestStop() {
+    _stopRequested = true;
+    _latestPending = null;
+    if (_inputDone) {
+      _maybeComplete();
+      return;
+    }
     final subscription = _subscription;
     if (subscription != null) {
-      unawaited(subscription.cancel());
+      _startSubscriptionCancellation(subscription);
+    }
+  }
+
+  void _startSubscriptionCancellation(StreamSubscription<double> subscription) {
+    if (_cancellationStarted) {
+      return;
+    }
+    _cancellationStarted = true;
+    Future<void>.sync(subscription.cancel).then(
+      (_) {
+        _inputDone = true;
+        _maybeComplete();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        _recordError(error, stackTrace);
+        _inputDone = true;
+        _maybeComplete();
+      },
+    );
+  }
+
+  void _recordError(Object error, StackTrace stackTrace) {
+    _error ??= error;
+    _errorStackTrace ??= stackTrace;
+  }
+
+  void _maybeComplete() {
+    if (!_inputDone || _draining || _completion.isCompleted) {
+      return;
+    }
+    final error = _error;
+    if (error == null) {
+      _completion.complete();
+    } else {
+      _completion.completeError(error, _errorStackTrace);
     }
   }
 }
