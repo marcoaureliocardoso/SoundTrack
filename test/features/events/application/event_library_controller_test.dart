@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/events/application/event_audio_availability_service.dart';
 import 'package:soundtrack/features/events/application/event_library_controller.dart';
 import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
@@ -206,6 +207,37 @@ void main() {
       expect((await repository.findById('event'))!.name, 'Depois');
     });
 
+    test(
+      'rename preserves derived pending audio without persisting it',
+      () async {
+        final event = _eventWithAudio();
+        final repository = InMemoryEventRepository([event]);
+        var canReadCalls = 0;
+        final availability = EventAudioAvailabilityService(
+          canRead: (_) async {
+            canReadCalls++;
+            return false;
+          },
+          probeAudio: (_) async => throw StateError('must not probe'),
+        );
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'unused',
+          revalidateAudio: availability.revalidate,
+        );
+
+        await controller.load();
+        await controller.rename('event', 'Depois');
+
+        expect(controller.events.single.name, 'Depois');
+        expect(controller.events.single.moments.single.audio!.pending, isTrue);
+        final persisted = await repository.findById('event');
+        expect(persisted!.name, 'Depois');
+        expect(persisted.moments.single.audio!.pending, isFalse);
+        expect(canReadCalls, 2);
+      },
+    );
+
     test('events cannot be mutated externally', () async {
       final controller = EventLibraryController(
         repository: InMemoryEventRepository(),
@@ -351,7 +383,64 @@ void main() {
         ]);
       },
     );
+
+    test(
+      'duplicate returns and exposes pending projection without persisting it',
+      () async {
+        final original = _eventWithAudio();
+        final repository = InMemoryEventRepository([original]);
+        var canReadCalls = 0;
+        final availability = EventAudioAvailabilityService(
+          canRead: (_) async {
+            canReadCalls++;
+            return false;
+          },
+          probeAudio: (_) async => throw StateError('must not probe'),
+        );
+        final controller = EventLibraryController(
+          repository: repository,
+          newId: () => 'copy',
+          revalidateAudio: availability.revalidate,
+        );
+
+        await controller.load();
+        final duplicate = await controller.duplicate('event');
+
+        expect(duplicate.moments.single.audio!.pending, isTrue);
+        expect(
+          controller.events.every(
+            (event) => event.moments.single.audio!.pending,
+          ),
+          isTrue,
+        );
+        expect(
+          (await repository.findById('event'))!.moments.single.audio!.pending,
+          isFalse,
+        );
+        expect(
+          (await repository.findById('copy'))!.moments.single.audio!.pending,
+          isFalse,
+        );
+        expect(canReadCalls, 2);
+      },
+    );
   });
+}
+
+SoundTrackEvent _eventWithAudio() {
+  return SoundTrackEvent.create(id: 'event', name: 'Antes').copyWith(
+    moments: [
+      EventMoment.create(id: 'moment', position: 0, name: 'Entrada').copyWith(
+        audio: const AudioReference(
+          uri: 'content://audio/entry',
+          displayName: 'entrada.ogg',
+          pending: false,
+          artist: null,
+          duration: null,
+        ),
+      ),
+    ],
+  );
 }
 
 class _DelayedFindAllRepository extends InMemoryEventRepository {

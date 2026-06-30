@@ -90,10 +90,11 @@ class EventLibraryController extends ChangeNotifier {
             moments: [...original.moments],
           );
       await _repository.save(duplicate);
+      final revalidated = await _revalidateOne(duplicate);
       if (!_disposed) {
-        _upsert(duplicate);
+        _upsert(revalidated);
       }
-      return duplicate;
+      return revalidated;
     });
   }
 
@@ -108,8 +109,9 @@ class EventLibraryController extends ChangeNotifier {
         updatedAt: DateTime.now().toUtc(),
       );
       await _repository.save(renamed);
+      final revalidated = await _revalidateOne(renamed);
       if (!_disposed) {
-        _upsert(renamed);
+        _upsert(revalidated);
       }
     });
   }
@@ -171,6 +173,10 @@ class EventLibraryController extends ChangeNotifier {
       ..._events.where((candidate) => candidate.id != event.id),
       event,
     ]);
+  }
+
+  Future<SoundTrackEvent> _revalidateOne(SoundTrackEvent event) async {
+    return (await _revalidateAudio([event])).single;
   }
 
   List<SoundTrackEvent> _ordered(Iterable<SoundTrackEvent> events) {
