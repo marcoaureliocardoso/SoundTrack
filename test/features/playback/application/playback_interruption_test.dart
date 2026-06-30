@@ -118,6 +118,27 @@ void main() {
           await fixture.dispose();
         },
       );
+
+      test('queued user $action before begin never auto-resumes', () async {
+        final fixture = _Fixture();
+        await fixture.start();
+        final focus = _FocusProbe();
+
+        final override = action == 'pause'
+            ? fixture.coordinator.pause()
+            : fixture.coordinator.stop();
+        final begin = fixture.coordinator.handleAudioSessionEvent(
+          const PlaybackInterruptionStarted(AudioInterruptionType.pause),
+        );
+        await Future.wait([override, begin]);
+        await fixture.coordinator.handleAudioSessionEvent(
+          _end(AudioInterruptionType.pause, focus),
+        );
+
+        expect(focus.calls, 0);
+        expect(_playCalls(fixture), 1);
+        await fixture.dispose();
+      });
     }
 
     test(

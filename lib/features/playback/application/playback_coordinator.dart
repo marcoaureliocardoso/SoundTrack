@@ -387,6 +387,7 @@ final class PlaybackCoordinator implements LivePlaybackPort {
               if (_pauseInterruptions == 0) {
                 _resumeIntentGeneration =
                     wasPlaying &&
+                        _snapshot.value.playing &&
                         intentGeneration == _userPlaybackIntentGeneration &&
                         _unknownInterruptions == 0
                     ? intentGeneration
