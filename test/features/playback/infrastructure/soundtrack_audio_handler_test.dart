@@ -1,0 +1,286 @@
+import 'dart:async';
+
+import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/playback/application/live_playback_port.dart';
+import 'package:soundtrack/features/playback/domain/playback_alert.dart';
+import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
+import 'package:soundtrack/features/playback/infrastructure/audio_engine_factory.dart';
+import 'package:soundtrack/features/playback/infrastructure/soundtrack_audio_handler.dart';
+import 'package:soundtrack/main.dart' as app;
+
+void main() {
+  test('audio service config is valid for an ongoing notification', () {
+    expect(app.soundTrackAudioServiceConfig.androidNotificationOngoing, isTrue);
+    expect(
+      app.soundTrackAudioServiceConfig.androidStopForegroundOnPause,
+      isTrue,
+    );
+  });
+
+  test('AudioEngineFactory exposes an AudioService-compatible builder', () {
+    final AudioHandler Function() builder = AudioEngineFactory.buildHandler;
+
+    expect(builder, isNotNull);
+  });
+
+  group('SoundTrackAudioHandler', () {
+    late _FakePlaybackCoordinator coordinator;
+    late SoundTrackAudioHandler handler;
+
+    setUp(() {
+      coordinator = _FakePlaybackCoordinator();
+      handler = SoundTrackAudioHandler(coordinator: coordinator);
+    });
+
+    tearDown(() => handler.dispose());
+
+    test(
+      'playMediaItem decodes every moment field and publishes metadata',
+      () async {
+        await handler.playMediaItem(_mediaItem());
+
+        final request = coordinator.started.single;
+        expect(request.momentId, 'moment-1');
+        expect(request.momentName, 'Entrada');
+        expect(request.uri, Uri.parse('file:///music/entrada.mp3'));
+        expect(request.audioDisplayName, 'entrada.mp3');
+        expect(request.loop, isTrue);
+        expect(request.narrationEnabled, isFalse);
+        expect(request.gainDb, -3.5);
+        expect(request.fadeIn, const Duration(milliseconds: 1200));
+        expect(request.fadeOut, const Duration(milliseconds: 2300));
+        expect(handler.mediaItem.value?.title, 'Entrada');
+        expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+      },
+    );
+
+    test('play, pause and stop delegate to the coordinator', () async {
+      await handler.play();
+      await handler.pause();
+      await handler.stop();
+
+      expect(coordinator.resumeCalls, 1);
+      expect(coordinator.pauseCalls, 1);
+      expect(coordinator.stopCalls, 1);
+    });
+
+    test('playbackState mirrors snapshot with one pause or resume control', () {
+      coordinator.publish(
+        _snapshot(
+          phase: PlaybackPhase.loading,
+          playing: true,
+          position: const Duration(seconds: 4),
+        ),
+      );
+
+      var state = handler.playbackState.value;
+      expect(state.processingState, AudioProcessingState.loading);
+      expect(state.playing, isTrue);
+      expect(state.updatePosition, const Duration(seconds: 4));
+      expect(state.controls.map((control) => control.action), [
+        MediaAction.pause,
+      ]);
+      expect(state.androidCompactActionIndices, [0]);
+      expect(state.controls, isNot(contains(MediaControl.skipToNext)));
+      expect(state.controls, isNot(contains(MediaControl.skipToPrevious)));
+
+      coordinator.publish(
+        _snapshot(phase: PlaybackPhase.paused, playing: false),
+      );
+      state = handler.playbackState.value;
+      expect(state.processingState, AudioProcessingState.ready);
+      expect(state.controls.single.action, MediaAction.play);
+
+      coordinator.publish(
+        _snapshot(phase: PlaybackPhase.transitioning, playing: true),
+      );
+      expect(
+        handler.playbackState.value.processingState,
+        AudioProcessingState.loading,
+      );
+
+      coordinator.publish(_snapshot(phase: PlaybackPhase.stopped));
+      expect(
+        handler.playbackState.value.processingState,
+        AudioProcessingState.idle,
+      );
+    });
+
+    test('active media item retains moment and audio display names', () async {
+      await handler.startMoment(_request());
+      coordinator.publish(
+        _snapshot(
+          phase: PlaybackPhase.playing,
+          playing: true,
+          activeMomentId: 'moment-1',
+        ),
+      );
+
+      expect(handler.mediaItem.value?.id, 'moment-1');
+      expect(handler.mediaItem.value?.title, 'Entrada');
+      expect(handler.mediaItem.value?.artist, 'entrada.mp3');
+    });
+
+    test('custom actions validate then delegate', () async {
+      await handler.customAction('startMoment', _mediaItem().extras);
+      await handler.customAction('setNarration', {'active': true});
+      await handler.customAction('setSessionVolumes', {
+        'masterVolume': 0.8,
+        'musicVolume': 0.7,
+        'narrationVolume': 0.3,
+      });
+      await handler.customAction('restorePresetVolumes');
+
+      expect(coordinator.started.single.momentName, 'Entrada');
+      expect(coordinator.narration, [true]);
+      expect(coordinator.volumes, [(master: 0.8, music: 0.7, narration: 0.3)]);
+      expect(coordinator.restoreCalls, 1);
+    });
+
+    test(
+      'invalid custom action payload is typed and does not mutate',
+      () async {
+        await expectLater(
+          handler.customAction('setSessionVolumes', {
+            'masterVolume': 'loud',
+            'musicVolume': 0.7,
+            'narrationVolume': 0.3,
+          }),
+          throwsA(isA<AudioHandlerPayloadException>()),
+        );
+        await expectLater(
+          handler.customAction('startMoment', {'momentId': 'incomplete'}),
+          throwsA(isA<AudioHandlerPayloadException>()),
+        );
+
+        expect(coordinator.volumes, isEmpty);
+        expect(coordinator.started, isEmpty);
+      },
+    );
+
+    test('dispose is idempotent and suppresses late publications', () async {
+      final states = <PlaybackState>[];
+      final subscription = handler.playbackState.listen(states.add);
+      await handler.dispose();
+      await handler.dispose();
+      final beforeLatePublish = states.length;
+
+      coordinator.publish(
+        _snapshot(phase: PlaybackPhase.playing, playing: true),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(coordinator.disposeCalls, 1);
+      expect(states.length, beforeLatePublish);
+      await subscription.cancel();
+    });
+  });
+}
+
+MediaItem _mediaItem() => MediaItem(
+  id: 'moment-1',
+  title: 'Entrada',
+  extras: {
+    'momentId': 'moment-1',
+    'momentName': 'Entrada',
+    'uri': 'file:///music/entrada.mp3',
+    'audioDisplayName': 'entrada.mp3',
+    'loop': true,
+    'narrationEnabled': false,
+    'gainDb': -3.5,
+    'fadeInMs': 1200,
+    'fadeOutMs': 2300,
+  },
+);
+
+MomentPlaybackRequest _request() => MomentPlaybackRequest(
+  momentId: 'moment-1',
+  momentName: 'Entrada',
+  uri: Uri.parse('file:///music/entrada.mp3'),
+  audioDisplayName: 'entrada.mp3',
+  loop: true,
+  narrationEnabled: false,
+  gainDb: -3.5,
+  fadeIn: const Duration(milliseconds: 1200),
+  fadeOut: const Duration(milliseconds: 2300),
+);
+
+PlaybackSnapshot _snapshot({
+  required PlaybackPhase phase,
+  bool playing = false,
+  Duration position = Duration.zero,
+  String? activeMomentId,
+}) {
+  return PlaybackSnapshot(
+    phase: phase,
+    playing: playing,
+    position: position,
+    duration: const Duration(minutes: 2),
+    narrationActive: false,
+    masterVolume: 0.8,
+    musicVolume: 1,
+    narrationVolume: 0.25,
+    activeMomentId: activeMomentId,
+  );
+}
+
+final class _FakePlaybackCoordinator implements LivePlaybackPort {
+  final notifier = ValueNotifier<PlaybackSnapshot>(
+    const PlaybackSnapshot.idle(),
+  );
+  final alertsController = StreamController<PlaybackAlert>.broadcast();
+  final started = <MomentPlaybackRequest>[];
+  final narration = <bool>[];
+  final volumes = <({double master, double music, double narration})>[];
+  var pauseCalls = 0;
+  var resumeCalls = 0;
+  var stopCalls = 0;
+  var restoreCalls = 0;
+  var disposeCalls = 0;
+
+  @override
+  ValueListenable<PlaybackSnapshot> get snapshot => notifier;
+
+  @override
+  Stream<PlaybackAlert> get alerts => alertsController.stream;
+
+  void publish(PlaybackSnapshot snapshot) => notifier.value = snapshot;
+
+  @override
+  Future<void> startMoment(MomentPlaybackRequest request) async {
+    started.add(request);
+  }
+
+  @override
+  Future<void> pause() async => pauseCalls++;
+
+  @override
+  Future<void> resume() async => resumeCalls++;
+
+  @override
+  Future<void> stop() async => stopCalls++;
+
+  @override
+  Future<void> setNarration(bool active) async => narration.add(active);
+
+  @override
+  Future<void> setSessionVolumes({
+    required double masterVolume,
+    required double musicVolume,
+    required double narrationVolume,
+  }) async {
+    volumes.add((
+      master: masterVolume,
+      music: musicVolume,
+      narration: narrationVolume,
+    ));
+  }
+
+  @override
+  Future<void> restorePresetVolumes() async => restoreCalls++;
+
+  @override
+  Future<void> dispose() async => disposeCalls++;
+}

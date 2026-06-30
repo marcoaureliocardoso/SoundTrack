@@ -1,9 +1,9 @@
 package com.soundtrack.soundtrack
 
-import io.flutter.embedding.android.FlutterFragmentActivity
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 
-class MainActivity : FlutterFragmentActivity() {
+class MainActivity : AudioServiceFragmentActivity() {
     private var documentChannel: DocumentChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
