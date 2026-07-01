@@ -53,7 +53,7 @@ class EventLibraryController extends ChangeNotifier {
 
   EventPreflightStatus preflightStatusFor(SoundTrackEvent event) {
     final record = _records[event.id];
-    if (record == null || record.isStaleFor(event.updatedAt)) {
+    if (record == null || record.isStaleForEvent(event)) {
       return EventPreflightStatus.unchecked;
     }
     if (record.errorCount > 0) return EventPreflightStatus.errors;
@@ -65,7 +65,12 @@ class EventLibraryController extends ChangeNotifier {
     return _enqueue(() async {
       try {
         final events = await _repository.findAll();
-        final records = await _preflightRecords?.findAll();
+        List<PreflightRecord>? records;
+        try {
+          records = await _preflightRecords?.findAll();
+        } catch (_) {
+          records = const [];
+        }
         if (_disposed) {
           return;
         }
@@ -147,11 +152,16 @@ class EventLibraryController extends ChangeNotifier {
 
   Future<void> delete(String id) {
     return _mutate(() async {
-      await _preflightRecords?.delete(id);
       await _repository.delete(id);
       if (!_disposed) {
         _events = List.unmodifiable(_events.where((event) => event.id != id));
         _records = Map.unmodifiable({..._records}..remove(id));
+      }
+      try {
+        await _preflightRecords?.delete(id);
+      } catch (_) {
+        // The event repository is authoritative. A leftover compact status
+        // record is harmless and can be overwritten or removed later.
       }
     });
   }

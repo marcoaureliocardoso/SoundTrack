@@ -442,6 +442,7 @@ void main() {
           eventId: current.id,
           checkedAt: DateTime.utc(2026, 7, 1),
           eventUpdatedAt: current.updatedAt,
+          sourceSignature: preflightSourceSignature(current),
           errorCount: 0,
           warningCount: 2,
         ),
@@ -471,6 +472,42 @@ void main() {
       );
     });
 
+    test('marks a record stale when revalidation changes availability', () async {
+      final event = _eventWithAudio();
+      final records = _MemoryPreflightRecords([
+        PreflightRecord(
+          eventId: event.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: event.updatedAt,
+          sourceSignature: preflightSourceSignature(event),
+          errorCount: 0,
+          warningCount: 0,
+        ),
+      ]);
+      final controller = EventLibraryController(
+        repository: InMemoryEventRepository([event]),
+        newId: () => 'unused',
+        preflightRecords: records,
+        revalidateAudio: (events) async => [
+          events.single.copyWith(
+            moments: [
+              events.single.moments.single.copyWith(
+                audio: events.single.moments.single.audio!.markPending(),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await controller.load();
+
+      expect(controller.events.single.moments.single.audio!.pending, isTrue);
+      expect(
+        controller.preflightStatusFor(controller.events.single),
+        EventPreflightStatus.unchecked,
+      );
+    });
+
     test('deleting an event also deletes its preflight record', () async {
       final event = SoundTrackEvent.create(id: 'event', name: 'Event');
       final records = _MemoryPreflightRecords([
@@ -491,6 +528,77 @@ void main() {
       await controller.delete(event.id);
 
       expect(await records.findByEventId(event.id), isNull);
+    });
+
+    test('preflight load failure leaves events visible and unchecked', () async {
+      final event = SoundTrackEvent.create(id: 'event', name: 'Event');
+      final records = _MemoryPreflightRecords()
+        ..findAllError = StateError('corrupt preflight records');
+      final controller = EventLibraryController(
+        repository: InMemoryEventRepository([event]),
+        newId: () => 'unused',
+        preflightRecords: records,
+      );
+
+      await controller.load();
+
+      expect(controller.events, [same(event)]);
+      expect(controller.error, isNull);
+      expect(
+        controller.preflightStatusFor(event),
+        EventPreflightStatus.unchecked,
+      );
+    });
+
+    test('event delete failure preserves its preflight record', () async {
+      final event = SoundTrackEvent.create(id: 'event', name: 'Event');
+      final repository = InMemoryEventRepository([event])
+        ..deleteError = StateError('event delete failed');
+      final records = _MemoryPreflightRecords([
+        PreflightRecord(
+          eventId: event.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: event.updatedAt,
+          errorCount: 0,
+          warningCount: 0,
+        ),
+      ]);
+      final controller = EventLibraryController(
+        repository: repository,
+        newId: () => 'unused',
+        preflightRecords: records,
+      );
+
+      await expectLater(controller.delete(event.id), throwsStateError);
+
+      expect(await records.findByEventId(event.id), isNotNull);
+      expect(await repository.findById(event.id), same(event));
+    });
+
+    test('record delete failure does not resurrect a deleted event', () async {
+      final event = SoundTrackEvent.create(id: 'event', name: 'Event');
+      final repository = InMemoryEventRepository([event]);
+      final records = _MemoryPreflightRecords([
+        PreflightRecord(
+          eventId: event.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: event.updatedAt,
+          errorCount: 0,
+          warningCount: 0,
+        ),
+      ])..deleteError = StateError('record delete failed');
+      final controller = EventLibraryController(
+        repository: repository,
+        newId: () => 'unused',
+        preflightRecords: records,
+      );
+      await controller.load();
+
+      await controller.delete(event.id);
+
+      expect(controller.events, isEmpty);
+      expect(await repository.findById(event.id), isNull);
+      expect(controller.error, isNull);
     });
   });
 }
@@ -558,13 +666,20 @@ class _MemoryPreflightRecords implements PreflightRecordRepository {
     : _records = {for (final record in initial) record.eventId: record};
 
   final Map<String, PreflightRecord> _records;
+  Object? findAllError;
+  Object? deleteError;
 
   @override
-  Future<void> delete(String eventId) async => _records.remove(eventId);
+  Future<void> delete(String eventId) async {
+    if (deleteError case final error?) throw error;
+    _records.remove(eventId);
+  }
 
   @override
-  Future<List<PreflightRecord>> findAll() async =>
-      List.unmodifiable(_records.values);
+  Future<List<PreflightRecord>> findAll() async {
+    if (findAllError case final error?) throw error;
+    return List.unmodifiable(_records.values);
+  }
 
   @override
   Future<PreflightRecord?> findByEventId(String eventId) async =>

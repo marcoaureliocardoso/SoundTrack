@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../events/data/event_storage_exception.dart';
+import '../../events/domain/soundtrack_event.dart';
 
 class PreflightRecord {
   PreflightRecord({
     required this.eventId,
     required DateTime checkedAt,
     DateTime? eventUpdatedAt,
+    this.sourceSignature,
     required this.errorCount,
     required this.warningCount,
   }) : checkedAt = checkedAt.toUtc(),
@@ -26,6 +28,7 @@ class PreflightRecord {
       eventId: json['eventId'] as String,
       checkedAt: DateTime.parse(json['checkedAt'] as String),
       eventUpdatedAt: DateTime.parse(json['eventUpdatedAt'] as String),
+      sourceSignature: json['sourceSignature'] as String?,
       errorCount: json['errorCount'] as int,
       warningCount: json['warningCount'] as int,
     );
@@ -34,15 +37,23 @@ class PreflightRecord {
   final String eventId;
   final DateTime checkedAt;
   final DateTime eventUpdatedAt;
+  final String? sourceSignature;
   final int errorCount;
   final int warningCount;
 
   bool isStaleFor(DateTime updatedAt) => eventUpdatedAt != updatedAt.toUtc();
 
+  bool isStaleForEvent(SoundTrackEvent event) {
+    return isStaleFor(event.updatedAt) ||
+        sourceSignature == null ||
+        sourceSignature != preflightSourceSignature(event);
+  }
+
   Map<String, Object?> toJson() => {
     'eventId': eventId,
     'checkedAt': checkedAt.toIso8601String(),
     'eventUpdatedAt': eventUpdatedAt.toIso8601String(),
+    'sourceSignature': sourceSignature,
     'errorCount': errorCount,
     'warningCount': warningCount,
   };
@@ -148,7 +159,7 @@ class JsonFilePreflightRecordRepository implements PreflightRecordRepository {
           'The preflight store schemaVersion must be an integer.',
         );
       }
-      if (version != 1) {
+      if (version < 1 || version > 2) {
         throw EventStorageException(
           code: EventStorageErrorCode.incompatibleSchema,
           path: source.absolute.path,
@@ -201,7 +212,7 @@ class JsonFilePreflightRecordRepository implements PreflightRecordRepository {
     await directory.create(recursive: true);
     await _temporaryFile.writeAsString(
       jsonEncode({
-        'schemaVersion': 1,
+        'schemaVersion': 2,
         'records': records.values.map((record) => record.toJson()).toList(),
       }),
       flush: true,
@@ -234,4 +245,21 @@ class JsonFilePreflightRecordRepository implements PreflightRecordRepository {
 
   static Future<File> _rename(File temporaryFile, String destinationPath) =>
       temporaryFile.rename(destinationPath);
+}
+
+String preflightSourceSignature(SoundTrackEvent event) {
+  final sources = event.moments
+      .map(
+        (moment) => <String, Object?>{
+          'momentId': moment.id,
+          'uri': moment.audio?.uri,
+          'pending': moment.audio?.pending ?? true,
+        },
+      )
+      .toList()
+    ..sort(
+      (left, right) =>
+          (left['momentId']! as String).compareTo(right['momentId']! as String),
+    );
+  return jsonEncode(sources);
 }

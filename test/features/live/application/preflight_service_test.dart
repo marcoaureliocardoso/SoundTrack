@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
@@ -51,7 +53,11 @@ void main() {
         expect(records.saved.single.eventId, event.id);
         expect(records.saved.single.errorCount, 0);
         expect(records.saved.single.warningCount, 0);
-        expect(records.saved.single.eventUpdatedAt, event.updatedAt);
+      expect(records.saved.single.eventUpdatedAt, event.updatedAt);
+      expect(
+        records.saved.single.sourceSignature,
+        preflightSourceSignature(event),
+      );
       },
     );
 
@@ -169,6 +175,149 @@ void main() {
         expect(records.saved.single.errorCount, 2);
       },
     );
+
+    test('deduplicates probes by URI and applies failures to each moment', () async {
+      var readCalls = 0;
+      var prepareCalls = 0;
+      final service = PreflightService(
+        canRead: (_) async {
+          readCalls++;
+          return false;
+        },
+        canPrepare: (_) async {
+          prepareCalls++;
+          return false;
+        },
+        systemStatus: _SystemStatus(),
+        records: _MemoryRecords(),
+      );
+
+      final result = await service.check(
+        _event([
+          _moment('first', 'content://shared'),
+          _moment('second', 'content://shared'),
+        ]),
+      );
+
+      expect(readCalls, 1);
+      expect(prepareCalls, 1);
+      for (final momentId in ['first', 'second']) {
+        expect(
+          result.items
+              .where((item) => item.momentId == momentId)
+              .map((item) => item.code),
+          [
+            PreflightCode.audioUnreadable,
+            PreflightCode.audioUnpreparable,
+          ],
+        );
+      }
+      expect(result.readyMomentIds, isEmpty);
+    });
+
+    test('starts read and prepare probes for one URI concurrently', () async {
+      final prepareStarted = Completer<void>();
+      final service = PreflightService(
+        canRead: (_) async {
+          await prepareStarted.future;
+          return true;
+        },
+        canPrepare: (_) async {
+          prepareStarted.complete();
+          return true;
+        },
+        systemStatus: _SystemStatus(),
+        records: _MemoryRecords(),
+        timeout: const Duration(milliseconds: 100),
+      );
+
+      final result = await service.check(
+        _event([_moment('moment', 'content://audio')]),
+      );
+
+      expect(result.readyMomentIds, {'moment'});
+    });
+
+    test('starts probes for all unique URIs concurrently', () async {
+      final secondUriStarted = Completer<void>();
+      final service = PreflightService(
+        canRead: (uri) async {
+          if (uri == 'content://first') {
+            await secondUriStarted.future;
+          } else {
+            secondUriStarted.complete();
+          }
+          return true;
+        },
+        canPrepare: (_) async => true,
+        systemStatus: _SystemStatus(),
+        records: _MemoryRecords(),
+        timeout: const Duration(milliseconds: 100),
+      );
+
+      final result = await service.check(
+        _event([
+          _moment('first', 'content://first'),
+          _moment('second', 'content://second'),
+        ]),
+      );
+
+      expect(result.readyMomentIds, {'first', 'second'});
+    });
+
+    test('times out stalled probes without delaying another URI or save', () async {
+      final records = _MemoryRecords();
+      final never = Completer<bool>().future;
+      final service = PreflightService(
+        canRead: (uri) =>
+            uri == 'content://stalled' ? never : Future.value(true),
+        canPrepare: (uri) =>
+            uri == 'content://stalled' ? never : Future.value(true),
+        systemStatus: _SystemStatus(),
+        records: records,
+        timeout: const Duration(milliseconds: 20),
+      );
+      final stopwatch = Stopwatch()..start();
+
+      final result = await service.check(
+        _event([
+          _moment('stalled', 'content://stalled'),
+          _moment('healthy', 'content://healthy'),
+        ]),
+      );
+
+      expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 500)));
+      expect(result.readyMomentIds, {'healthy'});
+      expect(
+        result.items
+            .where((item) => item.momentId == 'stalled')
+            .map((item) => item.code),
+        [
+          PreflightCode.audioUnreadable,
+          PreflightCode.audioUnpreparable,
+        ],
+      );
+      expect(records.saved.single.errorCount, 2);
+    });
+
+    test('times out stalled system status and still saves the record', () async {
+      final records = _MemoryRecords();
+      final service = PreflightService(
+        canRead: (_) async => true,
+        canPrepare: (_) async => true,
+        systemStatus: _StalledSystemStatus(),
+        records: records,
+        timeout: const Duration(milliseconds: 20),
+      );
+
+      final result = await service.check(
+        _event([_moment('healthy', 'content://healthy')]),
+      );
+
+      expect(result.readyMomentIds, {'healthy'});
+      expect(result.hasWarnings, isTrue);
+      expect(records.saved, hasLength(1));
+    });
 
     test(
       'turns probe and gateway failures into items and continues checks',
@@ -344,6 +493,28 @@ class _ThrowingSystemStatus implements SystemStatusGateway {
 
   @override
   Future<String> outputRouteLabel() async => throw StateError('route');
+
+  @override
+  Future<void> setKeepScreenOn(bool enabled) async {}
+}
+
+class _StalledSystemStatus implements SystemStatusGateway {
+  Future<T> _never<T>() => Completer<T>().future;
+
+  @override
+  Future<int> batteryPercent() => _never();
+
+  @override
+  Future<bool> charging() async => false;
+
+  @override
+  Future<bool?> doNotDisturbEnabled() => _never();
+
+  @override
+  Future<double> mediaVolume() => _never();
+
+  @override
+  Future<String> outputRouteLabel() => _never();
 
   @override
   Future<void> setKeepScreenOn(bool enabled) async {}

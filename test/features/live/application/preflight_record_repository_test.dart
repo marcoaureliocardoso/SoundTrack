@@ -78,7 +78,7 @@ void main() {
       ),
     );
 
-    await file.writeAsString(jsonEncode({'schemaVersion': 2, 'records': []}));
+    await file.writeAsString(jsonEncode({'schemaVersion': 3, 'records': []}));
     await expectLater(
       repository.findAll(),
       throwsA(
@@ -88,9 +88,34 @@ void main() {
               'code',
               EventStorageErrorCode.incompatibleSchema,
             )
-            .having((error) => error.cause, 'cause', 2),
+            .having((error) => error.cause, 'cause', 3),
       ),
     );
+  });
+
+  test('loads schema 1 records without a signature as legacy data', () async {
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}preflight-records.json',
+    );
+    await file.writeAsString(
+      jsonEncode({
+        'schemaVersion': 1,
+        'records': [
+          {
+            'eventId': 'legacy',
+            'checkedAt': DateTime.utc(2026, 7, 1).toIso8601String(),
+            'eventUpdatedAt': DateTime.utc(2026, 6, 30).toIso8601String(),
+            'errorCount': 0,
+            'warningCount': 0,
+          },
+        ],
+      }),
+    );
+
+    final record = await repository.findByEventId('legacy');
+
+    expect(record, isNotNull);
+    expect(record!.sourceSignature, isNull);
   });
 
   test('serializes overlapping saves across repository instances', () async {
@@ -151,6 +176,7 @@ PreflightRecord _record({
     eventId: eventId,
     checkedAt: DateTime.utc(2026, 7, 1),
     eventUpdatedAt: eventUpdatedAt ?? DateTime.utc(2026, 6, 30, 23),
+    sourceSignature: 'signature-$eventId',
     errorCount: errorCount,
     warningCount: warningCount,
   );
