@@ -10,7 +10,15 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
     const PlaybackSnapshot.idle(),
   );
   final alertController = StreamController<PlaybackAlert>.broadcast();
+  final requests = <MomentPlaybackRequest>[];
+  final commands = <String>[];
+  final sessionVolumes = <({double master, double music, double narration})>[];
+  Future<void> Function(MomentPlaybackRequest request)? onStartMoment;
   var disposeCalls = 0;
+  var pauseCalls = 0;
+  var resumeCalls = 0;
+  var stopCalls = 0;
+  var restoreCalls = 0;
 
   @override
   ValueListenable<PlaybackSnapshot> get snapshot => snapshotNotifier;
@@ -19,29 +27,54 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
   Stream<PlaybackAlert> get alerts => alertController.stream;
 
   @override
-  Future<void> startMoment(MomentPlaybackRequest request) async {}
+  Future<void> startMoment(MomentPlaybackRequest request) async {
+    requests.add(request);
+    commands.add('start:${request.momentId}');
+    await onStartMoment?.call(request);
+  }
 
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    pauseCalls++;
+    commands.add('pause');
+  }
 
   @override
-  Future<void> resume() async {}
+  Future<void> resume() async {
+    resumeCalls++;
+    commands.add('resume');
+  }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    stopCalls++;
+    commands.add('stop');
+  }
 
   @override
-  Future<void> setNarration(bool active) async {}
+  Future<void> setNarration(bool active) async {
+    commands.add('narration:$active');
+  }
 
   @override
   Future<void> setSessionVolumes({
     required double masterVolume,
     required double musicVolume,
     required double narrationVolume,
-  }) async {}
+  }) async {
+    sessionVolumes.add((
+      master: masterVolume,
+      music: musicVolume,
+      narration: narrationVolume,
+    ));
+    commands.add('volumes');
+  }
 
   @override
-  Future<void> restorePresetVolumes() async {}
+  Future<void> restorePresetVolumes() async {
+    restoreCalls++;
+    commands.add('restore');
+  }
 
   @override
   Future<void> dispose() async => disposeCalls++;
