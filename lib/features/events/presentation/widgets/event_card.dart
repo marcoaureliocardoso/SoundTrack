@@ -8,12 +8,14 @@ class EventCard extends StatelessWidget {
   const EventCard({
     required this.event,
     required this.onAction,
+    required this.preflightStatusLabel,
     this.exportEnabled = false,
     super.key,
   });
 
   final SoundTrackEvent event;
   final ValueChanged<EventCardAction> onAction;
+  final String preflightStatusLabel;
   final bool exportEnabled;
 
   @override
@@ -25,7 +27,8 @@ class EventCard extends StatelessWidget {
         title: Text(event.name),
         subtitle: Text(
           '${event.moments.length} '
-          '${event.moments.length == 1 ? 'momento' : 'momentos'}',
+          '${event.moments.length == 1 ? 'momento' : 'momentos'}'
+          ' · $preflightStatusLabel',
         ),
         trailing: PopupMenuButton<EventCardAction>(
           tooltip: 'Ações de ${event.name}',

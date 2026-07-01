@@ -110,6 +110,9 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
                   return EventCard(
                     key: ValueKey(event.id),
                     event: event,
+                    preflightStatusLabel: _preflightStatusLabel(
+                      widget.controller.preflightStatusFor(event),
+                    ),
                     exportEnabled: widget.onExport != null && !_documentBusy,
                     onAction: (action) => _handleAction(event, action),
                   );
@@ -315,6 +318,15 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       }
     }
   }
+}
+
+String _preflightStatusLabel(EventPreflightStatus status) {
+  return switch (status) {
+    EventPreflightStatus.unchecked => 'Não verificado',
+    EventPreflightStatus.ready => 'Pronto',
+    EventPreflightStatus.warnings => 'Avisos',
+    EventPreflightStatus.errors => 'Erros',
+  };
 }
 
 String eventDocumentErrorMessage(Object error) {

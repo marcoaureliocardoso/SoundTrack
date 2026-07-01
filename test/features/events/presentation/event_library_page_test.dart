@@ -11,6 +11,7 @@ import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
 import 'package:soundtrack/features/events/presentation/widgets/event_card.dart';
+import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
 import '../../../support/in_memory_event_repository.dart';
@@ -254,6 +255,47 @@ void main() {
       contains('acessar o arquivo'),
     );
   });
+
+  testWidgets('shows the persisted preflight status on each event card', (
+    tester,
+  ) async {
+    final ready = SoundTrackEvent.create(id: 'ready', name: 'Ready');
+    final errors = SoundTrackEvent.create(id: 'errors', name: 'Errors');
+    final records = _MemoryPreflightRecords([
+      PreflightRecord(
+        eventId: ready.id,
+        checkedAt: DateTime.utc(2026, 7, 1),
+        eventUpdatedAt: ready.updatedAt,
+        errorCount: 0,
+        warningCount: 0,
+      ),
+      PreflightRecord(
+        eventId: errors.id,
+        checkedAt: DateTime.utc(2026, 7, 1),
+        eventUpdatedAt: errors.updatedAt,
+        errorCount: 2,
+        warningCount: 0,
+      ),
+    ]);
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository([ready, errors]),
+      newId: () => 'unused',
+      preflightRecords: records,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Pronto'), findsOneWidget);
+    expect(find.textContaining('Erros'), findsOneWidget);
+  });
 }
 
 class _Gateway implements DocumentGateway {
@@ -271,4 +313,27 @@ class _Gateway implements DocumentGateway {
   @override
   Future<AudioProbeResult> probeAudio(String uri) async =>
       const AudioProbeResult(playable: true);
+}
+
+class _MemoryPreflightRecords implements PreflightRecordRepository {
+  _MemoryPreflightRecords(Iterable<PreflightRecord> initial)
+    : _records = {for (final record in initial) record.eventId: record};
+
+  final Map<String, PreflightRecord> _records;
+
+  @override
+  Future<void> delete(String eventId) async => _records.remove(eventId);
+
+  @override
+  Future<List<PreflightRecord>> findAll() async =>
+      List.unmodifiable(_records.values);
+
+  @override
+  Future<PreflightRecord?> findByEventId(String eventId) async =>
+      _records[eventId];
+
+  @override
+  Future<void> save(PreflightRecord record) async {
+    _records[record.eventId] = record;
+  }
 }

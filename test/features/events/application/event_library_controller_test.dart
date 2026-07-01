@@ -7,6 +7,7 @@ import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
+import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 
 import '../../../support/in_memory_event_repository.dart';
 
@@ -432,6 +433,65 @@ void main() {
         expect(probeCalls, 1);
       },
     );
+
+    test('loads current records and marks edited records unchecked', () async {
+      final current = SoundTrackEvent.create(id: 'current', name: 'Current');
+      final edited = SoundTrackEvent.create(id: 'edited', name: 'Edited');
+      final records = _MemoryPreflightRecords([
+        PreflightRecord(
+          eventId: current.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: current.updatedAt,
+          errorCount: 0,
+          warningCount: 2,
+        ),
+        PreflightRecord(
+          eventId: edited.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: edited.updatedAt.subtract(const Duration(seconds: 1)),
+          errorCount: 1,
+          warningCount: 0,
+        ),
+      ]);
+      final controller = EventLibraryController(
+        repository: InMemoryEventRepository([current, edited]),
+        newId: () => 'unused',
+        preflightRecords: records,
+      );
+
+      await controller.load();
+
+      expect(
+        controller.preflightStatusFor(current),
+        EventPreflightStatus.warnings,
+      );
+      expect(
+        controller.preflightStatusFor(edited),
+        EventPreflightStatus.unchecked,
+      );
+    });
+
+    test('deleting an event also deletes its preflight record', () async {
+      final event = SoundTrackEvent.create(id: 'event', name: 'Event');
+      final records = _MemoryPreflightRecords([
+        PreflightRecord(
+          eventId: event.id,
+          checkedAt: DateTime.utc(2026, 7, 1),
+          eventUpdatedAt: event.updatedAt,
+          errorCount: 0,
+          warningCount: 0,
+        ),
+      ]);
+      final controller = EventLibraryController(
+        repository: InMemoryEventRepository([event]),
+        newId: () => 'unused',
+        preflightRecords: records,
+      );
+
+      await controller.delete(event.id);
+
+      expect(await records.findByEventId(event.id), isNull);
+    });
   });
 }
 
@@ -490,5 +550,28 @@ class _CountingSaveRepository extends InMemoryEventRepository {
   Future<void> save(SoundTrackEvent event) async {
     saveCalls++;
     await super.save(event);
+  }
+}
+
+class _MemoryPreflightRecords implements PreflightRecordRepository {
+  _MemoryPreflightRecords([Iterable<PreflightRecord> initial = const []])
+    : _records = {for (final record in initial) record.eventId: record};
+
+  final Map<String, PreflightRecord> _records;
+
+  @override
+  Future<void> delete(String eventId) async => _records.remove(eventId);
+
+  @override
+  Future<List<PreflightRecord>> findAll() async =>
+      List.unmodifiable(_records.values);
+
+  @override
+  Future<PreflightRecord?> findByEventId(String eventId) async =>
+      _records[eventId];
+
+  @override
+  Future<void> save(PreflightRecord record) async {
+    _records[record.eventId] = record;
   }
 }

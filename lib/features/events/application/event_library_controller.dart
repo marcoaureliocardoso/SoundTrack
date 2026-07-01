@@ -5,20 +5,25 @@ import 'package:flutter/foundation.dart';
 import '../data/event_repository.dart';
 import '../domain/event_moment.dart';
 import '../domain/soundtrack_event.dart';
+import '../../live/application/preflight_record_repository.dart';
 
 typedef RevalidateEventAudio =
     Future<List<SoundTrackEvent>> Function(List<SoundTrackEvent> events);
+
+enum EventPreflightStatus { unchecked, ready, warnings, errors }
 
 class EventLibraryController extends ChangeNotifier {
   factory EventLibraryController({
     required EventRepository repository,
     required String Function() newId,
     RevalidateEventAudio? revalidateAudio,
+    PreflightRecordRepository? preflightRecords,
   }) {
     return EventLibraryController._(
       repository,
       newId,
       revalidateAudio ?? _identityRevalidation,
+      preflightRecords,
     );
   }
 
@@ -26,13 +31,16 @@ class EventLibraryController extends ChangeNotifier {
     this._repository,
     this._newId,
     this._revalidateAudio,
+    this._preflightRecords,
   );
 
   final EventRepository _repository;
   final String Function() _newId;
   final RevalidateEventAudio _revalidateAudio;
+  final PreflightRecordRepository? _preflightRecords;
 
   List<SoundTrackEvent> _events = const [];
+  Map<String, PreflightRecord> _records = const {};
   bool _loading = false;
   Object? _error;
   Future<void> _operationQueue = Future.value();
@@ -43,10 +51,21 @@ class EventLibraryController extends ChangeNotifier {
   bool get loading => _loading;
   Object? get error => _error;
 
+  EventPreflightStatus preflightStatusFor(SoundTrackEvent event) {
+    final record = _records[event.id];
+    if (record == null || record.isStaleFor(event.updatedAt)) {
+      return EventPreflightStatus.unchecked;
+    }
+    if (record.errorCount > 0) return EventPreflightStatus.errors;
+    if (record.warningCount > 0) return EventPreflightStatus.warnings;
+    return EventPreflightStatus.ready;
+  }
+
   Future<void> load() {
     return _enqueue(() async {
       try {
         final events = await _repository.findAll();
+        final records = await _preflightRecords?.findAll();
         if (_disposed) {
           return;
         }
@@ -55,6 +74,11 @@ class EventLibraryController extends ChangeNotifier {
           return;
         }
         _events = _ordered(revalidated);
+        _records = records == null
+            ? const {}
+            : Map.unmodifiable({
+                for (final record in records) record.eventId: record,
+              });
         _error = null;
       } catch (error) {
         if (!_disposed) {
@@ -123,9 +147,11 @@ class EventLibraryController extends ChangeNotifier {
 
   Future<void> delete(String id) {
     return _mutate(() async {
+      await _preflightRecords?.delete(id);
       await _repository.delete(id);
       if (!_disposed) {
         _events = List.unmodifiable(_events.where((event) => event.id != id));
+        _records = Map.unmodifiable({..._records}..remove(id));
       }
     });
   }

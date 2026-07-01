@@ -11,6 +11,7 @@ import '../features/events/data/event_export_codec.dart';
 import '../features/events/data/event_repository.dart';
 import '../features/events/data/json_file_event_repository.dart';
 import '../features/events/domain/soundtrack_event.dart';
+import '../features/live/application/preflight_record_repository.dart';
 import '../features/playback/application/live_playback_port.dart';
 import '../platform/documents/document_gateway.dart';
 import '../platform/documents/method_channel_document_gateway.dart';
@@ -23,6 +24,7 @@ class AppDependencies {
     required this.playback,
     this.documentGateway = const MethodChannelDocumentGateway(),
     this.exportCodec = const EventExportCodec(),
+    this.preflightRecords,
     this.clock = DateTime.now,
   });
 
@@ -31,6 +33,7 @@ class AppDependencies {
   final String Function() newMomentId;
   final DocumentGateway documentGateway;
   final EventExportCodec exportCodec;
+  final PreflightRecordRepository? preflightRecords;
   final DateTime Function() clock;
   final LivePlaybackPort playback;
 
@@ -38,15 +41,17 @@ class AppDependencies {
     required LivePlaybackPort playback,
   }) async {
     final documents = await getApplicationDocumentsDirectory();
-    final repository = JsonFileEventRepository(
-      Directory('${documents.path}${Platform.pathSeparator}soundtrack'),
+    final storageDirectory = Directory(
+      '${documents.path}${Platform.pathSeparator}soundtrack',
     );
+    final repository = JsonFileEventRepository(storageDirectory);
     const uuid = Uuid();
     return AppDependencies(
       eventRepository: repository,
       newEventId: uuid.v4,
       newMomentId: uuid.v4,
       playback: playback,
+      preflightRecords: JsonFilePreflightRecordRepository(storageDirectory),
     );
   }
 
@@ -59,6 +64,7 @@ class AppDependencies {
       repository: eventRepository,
       newId: newEventId,
       revalidateAudio: audioAvailability.revalidate,
+      preflightRecords: preflightRecords,
     );
   }
 
