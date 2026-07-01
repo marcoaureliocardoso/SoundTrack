@@ -35,8 +35,10 @@ Data: 2026-06-30
 - [x] Stop terminou em `stopped`, sem momento ativo e sem playback.
 - [x] 50 crossfades consecutivos com engine real, cada troca com fade-in e
   fade-out não zero de 15 ms; foi observado `transitioning` e endpoint final A.
-- [x] 12 taps rápidos durante fades; o último pedido venceu e terminou em
-  `playing`.
+- [x] 12 taps rápidos foram disparados somente após um listener capturar
+  `transitioning` numa transição de 250 ms ainda em andamento; a transição
+  inicial e os 12 pedidos foram todos aguardados, e o último pedido
+  (`rapid-b`) venceu em `playing`.
 - [x] Cleanup do handler, players e arquivos temporários executado em
   `tearDownAll`.
 

@@ -172,8 +172,16 @@ void main() {
       reason: 'stress transitions must exercise real non-zero fades',
     );
     final stressSnapshots = <PlaybackSnapshot>[];
+    Completer<void>? rapidTransitionStarted;
     void recordStressSnapshot() {
-      stressSnapshots.add(playback.snapshot.value);
+      final snapshot = playback.snapshot.value;
+      stressSnapshots.add(snapshot);
+      final barrier = rapidTransitionStarted;
+      if (barrier != null &&
+          !barrier.isCompleted &&
+          snapshot.phase == PlaybackPhase.transitioning) {
+        barrier.complete();
+      }
     }
 
     playback.snapshot.addListener(recordStressSnapshot);
@@ -199,6 +207,17 @@ void main() {
       );
       expect(playback.snapshot.value.activeMomentId, 'a');
 
+      rapidTransitionStarted = Completer<void>();
+      final initialRapidTransition = playback.startMoment(
+        _request(
+          'rapid-primer',
+          audioB.uri,
+          fade: const Duration(milliseconds: 250),
+        ),
+      );
+      await rapidTransitionStarted.future.timeout(const Duration(seconds: 8));
+      expect(playback.snapshot.value.phase, PlaybackPhase.transitioning);
+
       final rapidRequests = <Future<void>>[];
       for (var index = 0; index < 12; index++) {
         final useA = index.isEven;
@@ -212,11 +231,12 @@ void main() {
           ),
         );
       }
-      await Future.wait(rapidRequests);
+      await Future.wait([initialRapidTransition, ...rapidRequests]);
       await _waitUntil(
         () => playback.snapshot.value.activeMomentId == 'rapid-b',
       );
       expect(playback.snapshot.value.phase, PlaybackPhase.playing);
+      expect(playback.snapshot.value.activeMomentId, 'rapid-b');
     } finally {
       playback.snapshot.removeListener(recordStressSnapshot);
     }
