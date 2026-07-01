@@ -248,18 +248,20 @@ class JsonFilePreflightRecordRepository implements PreflightRecordRepository {
 }
 
 String preflightSourceSignature(SoundTrackEvent event) {
-  final sources = event.moments
-      .map(
-        (moment) => <String, Object?>{
-          'momentId': moment.id,
-          'uri': moment.audio?.uri,
-          'pending': moment.audio?.pending ?? true,
-        },
-      )
-      .toList()
-    ..sort(
-      (left, right) =>
-          (left['momentId']! as String).compareTo(right['momentId']! as String),
-    );
+  final sources =
+      event.moments
+          .map(
+            (moment) => <String, Object?>{
+              'momentId': moment.id,
+              'uri': moment.audio?.uri,
+              'pending': moment.audio?.pending ?? true,
+            },
+          )
+          .toList()
+        ..sort(
+          (left, right) => (left['momentId']! as String).compareTo(
+            right['momentId']! as String,
+          ),
+        );
   return jsonEncode(sources);
 }

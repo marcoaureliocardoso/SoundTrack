@@ -472,41 +472,44 @@ void main() {
       );
     });
 
-    test('marks a record stale when revalidation changes availability', () async {
-      final event = _eventWithAudio();
-      final records = _MemoryPreflightRecords([
-        PreflightRecord(
-          eventId: event.id,
-          checkedAt: DateTime.utc(2026, 7, 1),
-          eventUpdatedAt: event.updatedAt,
-          sourceSignature: preflightSourceSignature(event),
-          errorCount: 0,
-          warningCount: 0,
-        ),
-      ]);
-      final controller = EventLibraryController(
-        repository: InMemoryEventRepository([event]),
-        newId: () => 'unused',
-        preflightRecords: records,
-        revalidateAudio: (events) async => [
-          events.single.copyWith(
-            moments: [
-              events.single.moments.single.copyWith(
-                audio: events.single.moments.single.audio!.markPending(),
-              ),
-            ],
+    test(
+      'marks a record stale when revalidation changes availability',
+      () async {
+        final event = _eventWithAudio();
+        final records = _MemoryPreflightRecords([
+          PreflightRecord(
+            eventId: event.id,
+            checkedAt: DateTime.utc(2026, 7, 1),
+            eventUpdatedAt: event.updatedAt,
+            sourceSignature: preflightSourceSignature(event),
+            errorCount: 0,
+            warningCount: 0,
           ),
-        ],
-      );
+        ]);
+        final controller = EventLibraryController(
+          repository: InMemoryEventRepository([event]),
+          newId: () => 'unused',
+          preflightRecords: records,
+          revalidateAudio: (events) async => [
+            events.single.copyWith(
+              moments: [
+                events.single.moments.single.copyWith(
+                  audio: events.single.moments.single.audio!.markPending(),
+                ),
+              ],
+            ),
+          ],
+        );
 
-      await controller.load();
+        await controller.load();
 
-      expect(controller.events.single.moments.single.audio!.pending, isTrue);
-      expect(
-        controller.preflightStatusFor(controller.events.single),
-        EventPreflightStatus.unchecked,
-      );
-    });
+        expect(controller.events.single.moments.single.audio!.pending, isTrue);
+        expect(
+          controller.preflightStatusFor(controller.events.single),
+          EventPreflightStatus.unchecked,
+        );
+      },
+    );
 
     test('deleting an event also deletes its preflight record', () async {
       final event = SoundTrackEvent.create(id: 'event', name: 'Event');
@@ -530,25 +533,28 @@ void main() {
       expect(await records.findByEventId(event.id), isNull);
     });
 
-    test('preflight load failure leaves events visible and unchecked', () async {
-      final event = SoundTrackEvent.create(id: 'event', name: 'Event');
-      final records = _MemoryPreflightRecords()
-        ..findAllError = StateError('corrupt preflight records');
-      final controller = EventLibraryController(
-        repository: InMemoryEventRepository([event]),
-        newId: () => 'unused',
-        preflightRecords: records,
-      );
+    test(
+      'preflight load failure leaves events visible and unchecked',
+      () async {
+        final event = SoundTrackEvent.create(id: 'event', name: 'Event');
+        final records = _MemoryPreflightRecords()
+          ..findAllError = StateError('corrupt preflight records');
+        final controller = EventLibraryController(
+          repository: InMemoryEventRepository([event]),
+          newId: () => 'unused',
+          preflightRecords: records,
+        );
 
-      await controller.load();
+        await controller.load();
 
-      expect(controller.events, [same(event)]);
-      expect(controller.error, isNull);
-      expect(
-        controller.preflightStatusFor(event),
-        EventPreflightStatus.unchecked,
-      );
-    });
+        expect(controller.events, [same(event)]);
+        expect(controller.error, isNull);
+        expect(
+          controller.preflightStatusFor(event),
+          EventPreflightStatus.unchecked,
+        );
+      },
+    );
 
     test('event delete failure preserves its preflight record', () async {
       final event = SoundTrackEvent.create(id: 'event', name: 'Event');

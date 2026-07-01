@@ -90,10 +90,7 @@ class PreflightService {
     return _SourceCheck(read: results[0], prepare: results[1]);
   }
 
-  Future<_ProbeResult> _runProbe(
-    AudioPreflightProbe probe,
-    String uri,
-  ) async {
+  Future<_ProbeResult> _runProbe(AudioPreflightProbe probe, String uri) async {
     try {
       return _ProbeResult(value: await probe(uri).timeout(timeout));
     } catch (error) {
@@ -167,10 +164,7 @@ class PreflightService {
     try {
       final batteryFuture = systemStatus.batteryPercent().timeout(timeout);
       final chargingFuture = systemStatus.charging().timeout(timeout);
-      final values = await Future.wait<Object>([
-        batteryFuture,
-        chargingFuture,
-      ]);
+      final values = await Future.wait<Object>([batteryFuture, chargingFuture]);
       final battery = values[0] as int;
       final charging = values[1] as bool;
       if (battery < 20 && !charging) {
@@ -209,9 +203,7 @@ class PreflightService {
 
   Future<PreflightItem?> _checkDoNotDisturb() async {
     try {
-      final enabled = await systemStatus
-          .doNotDisturbEnabled()
-          .timeout(timeout);
+      final enabled = await systemStatus.doNotDisturbEnabled().timeout(timeout);
       if (enabled == true) return null;
       return PreflightItem(
         code: PreflightCode.doNotDisturb,
