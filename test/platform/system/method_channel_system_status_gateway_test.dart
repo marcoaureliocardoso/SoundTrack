@@ -36,7 +36,7 @@ void main() {
     expect(calls.single.arguments, isNull);
   });
 
-  test('mediaVolume returns zero when native max is not positive', () async {
+  test('mediaVolume returns zero for the fail-safe zero pair', () async {
     respondWith((_) async => <String, Object?>{'current': 0, 'max': 0});
 
     expect(await gateway.mediaVolume(), 0);
@@ -47,6 +47,8 @@ void main() {
       null,
       <String, Object?>{'current': '3', 'max': 10},
       <String, Object?>{'current': -1, 'max': 10},
+      <String, Object?>{'current': 0, 'max': -1},
+      <String, Object?>{'current': 1, 'max': 0},
       <String, Object?>{'current': 11, 'max': 10},
     ]) {
       respondWith((_) async => payload);

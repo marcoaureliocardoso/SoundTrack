@@ -14,13 +14,13 @@ class MethodChannelSystemStatusGateway implements SystemStatusGateway {
     final payload = await _invokeMap('mediaVolume');
     final current = payload['current'];
     final max = payload['max'];
-    if (current is! int || max is! int || current < 0) {
+    if (current is! int || max is! int || current < 0 || max < 0) {
       throw _invalidPayload('mediaVolume requires non-negative integer values');
     }
-    if (max <= 0) {
+    if (current == 0 && max == 0) {
       return 0;
     }
-    if (current > max) {
+    if (max == 0 || current > max) {
       throw _invalidPayload('mediaVolume current must not exceed max');
     }
     return (current / max).clamp(0, 1).toDouble();
