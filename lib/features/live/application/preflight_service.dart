@@ -39,9 +39,19 @@ class PreflightService {
         continue;
       }
 
-      bool readable;
+      bool? readable;
       try {
         readable = await canRead(uri);
+        if (!readable) {
+          items.add(
+            PreflightItem(
+              code: PreflightCode.audioUnreadable,
+              severity: PreflightSeverity.error,
+              message: 'O áudio de “${moment.name}” não pode ser lido.',
+              momentId: moment.id,
+            ),
+          );
+        }
       } catch (error) {
         items.add(
           PreflightItem(
@@ -52,23 +62,21 @@ class PreflightService {
             momentId: moment.id,
           ),
         );
-        continue;
-      }
-      if (!readable) {
-        items.add(
-          PreflightItem(
-            code: PreflightCode.audioUnreadable,
-            severity: PreflightSeverity.error,
-            message: 'O áudio de “${moment.name}” não pode ser lido.',
-            momentId: moment.id,
-          ),
-        );
-        continue;
       }
 
-      bool preparable;
+      bool? preparable;
       try {
         preparable = await canPrepare(uri);
+        if (!preparable) {
+          items.add(
+            PreflightItem(
+              code: PreflightCode.audioUnpreparable,
+              severity: PreflightSeverity.error,
+              message: 'O áudio de “${moment.name}” não pode ser preparado.',
+              momentId: moment.id,
+            ),
+          );
+        }
       } catch (error) {
         items.add(
           PreflightItem(
@@ -78,20 +86,10 @@ class PreflightService {
             momentId: moment.id,
           ),
         );
-        continue;
       }
-      if (!preparable) {
-        items.add(
-          PreflightItem(
-            code: PreflightCode.audioUnpreparable,
-            severity: PreflightSeverity.error,
-            message: 'O áudio de “${moment.name}” não pode ser preparado.',
-            momentId: moment.id,
-          ),
-        );
-        continue;
+      if (readable == true && preparable == true) {
+        readyMomentIds.add(moment.id);
       }
-      readyMomentIds.add(moment.id);
     }
 
     await _checkSystem(items);

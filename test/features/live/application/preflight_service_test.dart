@@ -140,6 +140,37 @@ void main() {
     });
 
     test(
+      'attempts prepare after read failure and records both source errors',
+      () async {
+        final records = _MemoryRecords();
+        var prepareCalls = 0;
+        final service = PreflightService(
+          canRead: (_) async => false,
+          canPrepare: (_) async {
+            prepareCalls++;
+            throw StateError('prepare failed');
+          },
+          systemStatus: _SystemStatus(),
+          records: records,
+        );
+
+        final result = await service.check(
+          _event([_moment('broken', 'content://broken')]),
+        );
+
+        expect(prepareCalls, 1);
+        expect(
+          result.items
+              .where((item) => item.momentId == 'broken')
+              .map((item) => item.code),
+          [PreflightCode.audioUnreadable, PreflightCode.audioUnpreparable],
+        );
+        expect(result.readyMomentIds, isNot(contains('broken')));
+        expect(records.saved.single.errorCount, 2);
+      },
+    );
+
+    test(
       'turns probe and gateway failures into items and continues checks',
       () async {
         final service = PreflightService(
