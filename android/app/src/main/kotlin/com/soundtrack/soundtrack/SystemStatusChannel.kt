@@ -21,6 +21,7 @@ private val BLUETOOTH_DEVICE_TYPES =
         AudioDeviceInfo.TYPE_BLE_HEADSET,
         AudioDeviceInfo.TYPE_BLE_SPEAKER,
         AudioDeviceInfo.TYPE_BLE_BROADCAST,
+        AudioDeviceInfo.TYPE_HEARING_AID,
     )
 private val WIRED_DEVICE_TYPES =
     setOf(
@@ -84,7 +85,7 @@ internal fun mapOutputRouteLabel(deviceTypes: Collection<Int>): String {
 
 /**
  * Returns null when notification-policy access is unavailable. With access,
- * SoundTrack considers DND enabled for every interruption filter except ALL.
+ * only Android's explicit enabled and disabled filters produce a boolean.
  */
 @VisibleForTesting
 internal fun mapDoNotDisturb(
@@ -92,7 +93,14 @@ internal fun mapDoNotDisturb(
     interruptionFilter: Int,
 ): Boolean? {
     if (!policyAccessGranted) return null
-    return interruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+    return when (interruptionFilter) {
+        NotificationManager.INTERRUPTION_FILTER_ALL -> false
+        NotificationManager.INTERRUPTION_FILTER_PRIORITY,
+        NotificationManager.INTERRUPTION_FILTER_ALARMS,
+        NotificationManager.INTERRUPTION_FILTER_NONE,
+        -> true
+        else -> null
+    }
 }
 
 @VisibleForTesting
