@@ -71,7 +71,7 @@ void main() {
         expect(controller.state.value.visibleAlert?.message, 'Falhou');
         expect(
           controller.state.value.momentStatus('second'),
-          MomentStatus.error,
+          MomentStatus.current,
         );
 
         controller.dismissAlert();
@@ -242,7 +242,7 @@ void main() {
     });
 
     test(
-      'serializes concurrent starts and evaluates the latest snapshot',
+      'dispatches a second start immediately while the first is pending',
       () async {
         final playback = FakeLivePlaybackPort();
         final firstStarted = Completer<void>();
@@ -251,8 +251,6 @@ void main() {
           if (request.momentId == 'first') {
             firstStarted.complete();
             await releaseFirst.future;
-            playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
-                .copyWith(activeMomentId: 'second');
           }
         };
         final controller = LiveEventController(
@@ -263,13 +261,85 @@ void main() {
         final first = controller.startMoment('first');
         await firstStarted.future;
         final second = controller.startMoment('second');
+
+        expect(playback.requests.map((request) => request.momentId), [
+          'first',
+          'second',
+        ]);
+
         releaseFirst.complete();
         await Future.wait([first, second]);
-
-        expect(playback.requests.map((request) => request.momentId), ['first']);
         await controller.dispose();
       },
     );
+
+    test('dispatches confirmed stop while a start is pending', () async {
+      final playback = FakeLivePlaybackPort();
+      final startEntered = Completer<void>();
+      final releaseStart = Completer<void>();
+      playback.onStartMoment = (_) async {
+        startEntered.complete();
+        await releaseStart.future;
+      };
+      final controller = LiveEventController(
+        event: _event(),
+        playback: playback,
+      );
+
+      final start = controller.startMoment('first');
+      await startEntered.future;
+      final stop = controller.stop(confirmed: true);
+
+      expect(playback.stopCalls, 1);
+
+      releaseStart.complete();
+      await Future.wait([start, stop]);
+      await controller.dispose();
+    });
+
+    test(
+      'invokes start after narration false without waiting for it to finish',
+      () async {
+        final playback = FakeLivePlaybackPort();
+        final releaseNarration = Completer<void>();
+        playback.onSetNarration = (_) => releaseNarration.future;
+        playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
+            .copyWith(narrationActive: true, activeMomentId: 'first');
+        final controller = LiveEventController(
+          event: _event(),
+          playback: playback,
+        );
+
+        final start = controller.startMoment('second');
+
+        expect(playback.commands, ['narration:false', 'start:second']);
+
+        releaseNarration.complete();
+        await start;
+        await controller.dispose();
+      },
+    );
+
+    test('propagates a delegated start failure to its caller', () async {
+      final playback = FakeLivePlaybackPort();
+      final failure = StateError('player failed');
+      playback.onStartMoment = (_) => Future<void>.error(failure);
+      final controller = LiveEventController(
+        event: _event(),
+        playback: playback,
+      );
+
+      await expectLater(
+        controller.startMoment('first'),
+        throwsA(same(failure)),
+      );
+
+      expect(
+        controller.state.value.visibleAlert?.code,
+        PlaybackAlertCode.sourceFailed,
+      );
+      await controller.dispose();
+    });
   });
 
   group('LiveEventController lifecycle', () {
@@ -289,6 +359,59 @@ void main() {
       );
       await controller.dispose();
     });
+
+    test(
+      'clears only a matching stale source failure after retry succeeds',
+      () async {
+        final playback = FakeLivePlaybackPort();
+        final controller = LiveEventController(
+          event: _event(),
+          playback: playback,
+        );
+        playback.alertController.add(
+          const PlaybackAlert(
+            PlaybackAlertCode.sourceFailed,
+            'failed',
+            momentId: 'first',
+          ),
+        );
+        await _flush();
+        expect(
+          controller.state.value.momentStatus('first'),
+          MomentStatus.error,
+        );
+
+        playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
+            .copyWith(
+              phase: PlaybackPhase.playing,
+              playing: true,
+              activeMomentId: 'first',
+            );
+
+        expect(
+          controller.state.value.momentStatus('first'),
+          MomentStatus.current,
+        );
+        expect(controller.state.value.visibleAlert, isNull);
+
+        playback.alertController.add(
+          const PlaybackAlert(
+            PlaybackAlertCode.routeChanged,
+            'route changed',
+            momentId: 'first',
+          ),
+        );
+        await _flush();
+        playback.snapshotNotifier.value = playback.snapshotNotifier.value
+            .copyWith(position: const Duration(seconds: 1));
+
+        expect(
+          controller.state.value.visibleAlert?.code,
+          PlaybackAlertCode.routeChanged,
+        );
+        await controller.dispose();
+      },
+    );
 
     test('dispose is idempotent, detaches and never owns playback', () async {
       final playback = FakeLivePlaybackPort();

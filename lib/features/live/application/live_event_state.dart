@@ -36,11 +36,11 @@ class LiveEventState {
     if (moment == null) {
       return MomentStatus.error;
     }
-    if (_isSourceFailureFor(momentId)) {
-      return MomentStatus.error;
-    }
     if (playback.activeMomentId == momentId) {
       return MomentStatus.current;
+    }
+    if (_isSourceFailureFor(momentId)) {
+      return MomentStatus.error;
     }
     if (moment.audioPending) {
       return MomentStatus.pending;

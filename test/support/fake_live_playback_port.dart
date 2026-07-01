@@ -14,6 +14,7 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
   final commands = <String>[];
   final sessionVolumes = <({double master, double music, double narration})>[];
   Future<void> Function(MomentPlaybackRequest request)? onStartMoment;
+  Future<void> Function(bool active)? onSetNarration;
   var disposeCalls = 0;
   var pauseCalls = 0;
   var resumeCalls = 0;
@@ -54,6 +55,7 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
   @override
   Future<void> setNarration(bool active) async {
     commands.add('narration:$active');
+    await onSetNarration?.call(active);
   }
 
   @override

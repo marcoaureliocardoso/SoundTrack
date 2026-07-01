@@ -32,78 +32,66 @@ class LiveEventController {
   final ValueNotifier<LiveEventState> state;
 
   late final StreamSubscription<PlaybackAlert> _alertSubscription;
-  Future<void> _commandTail = Future<void>.value();
   Future<void>? _disposeFuture;
   bool _disposed = false;
 
   Future<void> startMoment(String momentId) {
-    return _enqueue(() async {
-      final current = state.value;
-      if (current.playback.activeMomentId == momentId) {
-        return;
-      }
+    if (_disposed) {
+      return Future<void>.value();
+    }
+    final current = state.value;
+    if (current.playback.activeMomentId == momentId) {
+      return Future<void>.value();
+    }
 
-      final moment = _momentById(momentId);
-      final uri = _validatedUri(moment?.audio?.uri);
-      if (moment == null || moment.audioPending || uri == null) {
-        _publishSourceUnavailable(
-          momentId,
-          moment == null
-              ? 'Momento não encontrado.'
-              : 'Áudio indisponível para este momento.',
-        );
-        return;
-      }
-
-      final activeMoment = current.activeMoment;
-      if (current.playback.narrationActive && activeMoment?.id != moment.id) {
-        await _playback.setNarration(false);
-        if (_disposed) {
-          return;
-        }
-      }
-
-      final request = MomentPlaybackRequest(
-        momentId: moment.id,
-        momentName: moment.name,
-        uri: uri,
-        audioDisplayName: moment.audio!.displayName,
-        loop: moment.endBehavior == EndBehavior.loop,
-        narrationEnabled: moment.narrationEnabled,
-        gainDb: moment.gainDb,
-        fadeIn: moment.fadeIn ?? current.event.audioSettings.fadeIn,
-        fadeOut: activeMoment?.fadeOut ?? current.event.audioSettings.fadeOut,
+    final moment = _momentById(momentId);
+    final uri = _validatedUri(moment?.audio?.uri);
+    if (moment == null || moment.audioPending || uri == null) {
+      _publishSourceUnavailable(
+        momentId,
+        moment == null
+            ? 'Momento não encontrado.'
+            : 'Áudio indisponível para este momento.',
       );
+      return Future<void>.value();
+    }
 
-      try {
-        await _playback.startMoment(request);
-      } catch (_) {
-        _publish(
-          PlaybackAlert(
-            PlaybackAlertCode.sourceFailed,
-            'Não foi possível iniciar o áudio deste momento.',
-            momentId: moment.id,
-          ),
-        );
-      }
-    });
+    final activeMoment = current.activeMoment;
+    final pending = <Future<void>>[];
+    if (current.playback.narrationActive && activeMoment?.id != moment.id) {
+      pending.add(Future<void>.sync(() => _playback.setNarration(false)));
+    }
+
+    final request = MomentPlaybackRequest(
+      momentId: moment.id,
+      momentName: moment.name,
+      uri: uri,
+      audioDisplayName: moment.audio!.displayName,
+      loop: moment.endBehavior == EndBehavior.loop,
+      narrationEnabled: moment.narrationEnabled,
+      gainDb: moment.gainDb,
+      fadeIn: moment.fadeIn ?? current.event.audioSettings.fadeIn,
+      fadeOut: activeMoment?.fadeOut ?? current.event.audioSettings.fadeOut,
+    );
+    pending.add(_startAndReportFailure(request));
+    return _waitForAll(pending);
   }
 
-  Future<void> pause() => _enqueue(_playback.pause);
+  Future<void> pause() => _invoke(_playback.pause);
 
-  Future<void> resume() => _enqueue(_playback.resume);
+  Future<void> resume() => _invoke(_playback.resume);
 
   Future<void> stop({required bool confirmed}) {
     if (!confirmed) {
       return Future<void>.value();
     }
-    return _enqueue(_playback.stop);
+    return _invoke(_playback.stop);
   }
 
   Future<void> confirmStop() => stop(confirmed: true);
 
   Future<void> setNarration(bool active) {
-    return _enqueue(() async {
+    return _invoke(() {
       final moment = state.value.activeMoment;
       if (moment == null || !moment.narrationEnabled) {
         _publishSourceUnavailable(
@@ -112,9 +100,9 @@ class LiveEventController {
               ? 'Inicie um momento com Narração habilitada.'
               : 'Narração não está habilitada para este momento.',
         );
-        return;
+        return Future<void>.value();
       }
-      await _playback.setNarration(active);
+      return _playback.setNarration(active);
     });
   }
 
@@ -123,7 +111,7 @@ class LiveEventController {
     required double musicVolume,
     required double narrationVolume,
   }) {
-    return _enqueue(
+    return _invoke(
       () => _playback.setSessionVolumes(
         masterVolume: masterVolume,
         musicVolume: musicVolume,
@@ -133,7 +121,7 @@ class LiveEventController {
   }
 
   Future<void> restorePresetVolumes() =>
-      _enqueue(_playback.restorePresetVolumes);
+      _invoke(_playback.restorePresetVolumes);
 
   void dismissAlert() {
     _publishState(state.value.copyWith(clearVisibleAlert: true));
@@ -162,18 +150,30 @@ class LiveEventController {
     return result;
   }
 
-  Future<void> _enqueue(Future<void> Function() command) {
-    final result = _commandTail.then((_) async {
-      if (_disposed) {
-        return;
-      }
-      await command();
-    });
-    _commandTail = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return result;
+  Future<void> _invoke(Future<void> Function() command) {
+    if (_disposed) {
+      return Future<void>.value();
+    }
+    return Future<void>.sync(command);
+  }
+
+  Future<void> _startAndReportFailure(MomentPlaybackRequest request) async {
+    try {
+      await _playback.startMoment(request);
+    } catch (error, stackTrace) {
+      _publish(
+        PlaybackAlert(
+          PlaybackAlertCode.sourceFailed,
+          'Não foi possível iniciar o áudio deste momento.',
+          momentId: request.momentId,
+        ),
+      );
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<void> _waitForAll(List<Future<void>> pending) async {
+    await Future.wait(pending);
   }
 
   EventMoment? _momentById(String id) {
@@ -197,7 +197,20 @@ class LiveEventController {
   }
 
   void _onSnapshot() {
-    _publishState(state.value.copyWith(playback: _playback.snapshot.value));
+    final current = state.value;
+    final snapshot = _playback.snapshot.value;
+    final alert = current.visibleAlert;
+    final recoveredFromSourceFailure =
+        snapshot.playing &&
+        snapshot.activeMomentId != null &&
+        alert?.code == PlaybackAlertCode.sourceFailed &&
+        alert?.momentId == snapshot.activeMomentId;
+    _publishState(
+      current.copyWith(
+        playback: snapshot,
+        clearVisibleAlert: recoveredFromSourceFailure,
+      ),
+    );
   }
 
   void _onAlert(PlaybackAlert alert) {
