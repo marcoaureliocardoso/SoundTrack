@@ -58,23 +58,49 @@ void main() {
     expect(find.text('Entrar mesmo assim'), findsOneWidget);
   });
 
-  testWidgets('recheck ignores a stale asynchronous result', (tester) async {
+  testWidgets('ignores a check result after disposal', (tester) async {
     final first = Completer<PreflightResult>();
-    final second = Completer<PreflightResult>();
-    final service = _ScriptedPreflightService([first.future, second.future]);
+    final service = _ScriptedPreflightService([first.future]);
 
     await tester.pumpWidget(_app(service: service));
-    await tester.tap(find.text('Reverificar'));
-    await tester.pump();
-
-    second.complete(_cleanResult());
-    await tester.pumpAndSettle();
-    expect(find.text('Iniciar Modo Evento'), findsOneWidget);
-
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     first.complete(_errorResult());
     await tester.pumpAndSettle();
-    expect(find.text('Iniciar Modo Evento'), findsOneWidget);
-    expect(find.text('Entrar mesmo assim'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('serializes checks and persists each completed run once', (
+    tester,
+  ) async {
+    final firstRead = Completer<bool>();
+    final records = _Records();
+    var readCalls = 0;
+    final service = PreflightService(
+      canRead: (_) {
+        readCalls++;
+        return readCalls == 1 ? firstRead.future : Future.value(true);
+      },
+      canPrepare: (_) async => true,
+      systemStatus: _SystemStatus(),
+      records: records,
+    );
+
+    await tester.pumpWidget(_app(service: service));
+    final checkingButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Reverificar'),
+    );
+    expect(checkingButton.onPressed, isNull);
+    expect(readCalls, 1);
+    expect(records.saveCalls, 0);
+
+    firstRead.complete(true);
+    await tester.pumpAndSettle();
+    expect(records.saveCalls, 1);
+
+    await tester.tap(find.text('Reverificar'));
+    await tester.pumpAndSettle();
+    expect(readCalls, 2);
+    expect(records.saveCalls, 2);
   });
 
   testWidgets('errors require explicit confirmation and preserve snapshot', (
@@ -126,7 +152,7 @@ void main() {
     expect(playback.commands, isEmpty);
     expect(playback.alertController.hasListener, isTrue);
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(playback.alertController.hasListener, isFalse);
     expect(playback.stopCalls, 0);
@@ -167,6 +193,85 @@ void main() {
 
     expect(find.text('Ao vivo'), findsOneWidget);
     expect(find.text('Confirmar entrada'), findsNothing);
+  });
+
+  testWidgets('serializes entry until dashboard returns', (tester) async {
+    var dashboardBuilds = 0;
+    final service = _ScriptedPreflightService([
+      Future.value(_cleanResult()),
+    ]);
+    await tester.pumpWidget(
+      _app(
+        service: service,
+        dashboardBuilder: (_, _) {
+          dashboardBuilds++;
+          return const Scaffold(body: Text('Ao vivo único'));
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Iniciar Modo Evento'),
+    );
+    button.onPressed!();
+    button.onPressed!();
+    await tester.pumpAndSettle();
+    expect(dashboardBuilds, 1);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    final returnedButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Iniciar Modo Evento'),
+    );
+    expect(returnedButton.onPressed, isNotNull);
+    await tester.tap(find.text('Iniciar Modo Evento'));
+    await tester.pumpAndSettle();
+    expect(dashboardBuilds, 2);
+  });
+
+  testWidgets('serializes error dialog and double confirmation', (
+    tester,
+  ) async {
+    var dashboardBuilds = 0;
+    final service = _ScriptedPreflightService([
+      Future.value(_errorResult()),
+    ]);
+    await tester.pumpWidget(
+      _app(
+        service: service,
+        dashboardBuilder: (_, _) {
+          dashboardBuilds++;
+          return const Scaffold(body: Text('Dashboard confirmado'));
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final entryButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Entrar mesmo assim'),
+    );
+    entryButton.onPressed!();
+    entryButton.onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('Confirmar entrada'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Entrar mesmo assim'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Entrar no Modo Evento'),
+    );
+    confirmButton.onPressed!();
+    confirmButton.onPressed!();
+    await tester.pumpAndSettle();
+    expect(dashboardBuilds, 1);
+    expect(find.text('Dashboard confirmado'), findsOneWidget);
   });
 
   testWidgets('check failure shows retry and recovers without crashing', (
@@ -281,6 +386,8 @@ final class _SystemStatus implements SystemStatusGateway {
 }
 
 final class _Records implements PreflightRecordRepository {
+  var saveCalls = 0;
+
   @override
   Future<void> delete(String eventId) async {}
 
@@ -291,5 +398,7 @@ final class _Records implements PreflightRecordRepository {
   Future<PreflightRecord?> findByEventId(String eventId) async => null;
 
   @override
-  Future<void> save(PreflightRecord record) async {}
+  Future<void> save(PreflightRecord record) async {
+    saveCalls++;
+  }
 }

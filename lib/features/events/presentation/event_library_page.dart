@@ -49,6 +49,7 @@ class EventLibraryPage extends StatefulWidget {
 
 class _EventLibraryPageState extends State<EventLibraryPage> {
   bool _documentBusy = false;
+  bool _openingLive = false;
 
   @override
   void initState() {
@@ -214,12 +215,19 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     }
   }
 
-  void _openLive(SoundTrackEvent snapshot) {
+  Future<void> _openLive(SoundTrackEvent snapshot) async {
     final builder = widget.buildLiveEntryPage;
-    if (builder == null) return;
-    Navigator.of(
-      context,
-    ).push<void>(MaterialPageRoute(builder: (_) => builder(snapshot)));
+    if (builder == null || _openingLive) return;
+    _openingLive = true;
+    try {
+      await Navigator.of(
+        context,
+      ).push<void>(MaterialPageRoute(builder: (_) => builder(snapshot)));
+    } finally {
+      if (mounted) {
+        _openingLive = false;
+      }
+    }
   }
 
   Future<void> _import() async {

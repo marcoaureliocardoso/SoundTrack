@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
+import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
 import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
@@ -95,6 +96,38 @@ void main() {
     expect(find.byType(LiveDashboardPage), findsOneWidget);
     expect(find.text('Formatura'), findsOneWidget);
     expect(playback.commands, isEmpty);
+  });
+
+  testWidgets('serializes repeated live entry from the editor', (tester) async {
+    final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository([event]),
+          newEventId: () => 'unused',
+          newMomentId: () => 'unused',
+          playback: FakeLivePlaybackPort(),
+          preflightRecords: _Records(),
+          systemStatus: _SystemStatus(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Formatura'));
+    await tester.pumpAndSettle();
+
+    final liveButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Modo Evento'),
+    );
+    liveButton.onPressed!();
+    liveButton.onPressed!();
+    await tester.pumpAndSettle();
+    expect(find.byType(PreflightPage), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(PreflightPage), findsNothing);
+    expect(find.byType(EventEditorPage), findsOneWidget);
   });
 }
 

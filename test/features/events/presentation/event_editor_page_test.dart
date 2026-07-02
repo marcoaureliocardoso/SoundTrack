@@ -218,7 +218,9 @@ void main() {
       MaterialApp(
         home: EventEditorPage(
           controller: controller,
-          onStartLive: (event) => snapshot = event,
+          onStartLive: (event) async {
+            snapshot = event;
+          },
         ),
       ),
     );

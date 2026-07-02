@@ -22,7 +22,7 @@ class EventEditorPage extends StatefulWidget {
 
   final EventEditorController controller;
   final Future<AudioReference?> Function()? onSelectAudio;
-  final ValueChanged<SoundTrackEvent>? onStartLive;
+  final Future<void> Function(SoundTrackEvent event)? onStartLive;
 
   @override
   State<EventEditorPage> createState() => _EventEditorPageState();
@@ -31,6 +31,7 @@ class EventEditorPage extends StatefulWidget {
 class _EventEditorPageState extends State<EventEditorPage> {
   late final TextEditingController _nameController;
   bool _saving = false;
+  bool _startingLive = false;
   bool _allowPop = false;
 
   @override
@@ -127,7 +128,7 @@ class _EventEditorPageState extends State<EventEditorPage> {
             ],
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: () => widget.onStartLive?.call(event),
+              onPressed: _startingLive ? null : () => _startLive(event),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Modo Evento'),
             ),
@@ -228,6 +229,20 @@ class _EventEditorPageState extends State<EventEditorPage> {
     } finally {
       if (mounted) {
         setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _startLive(SoundTrackEvent event) async {
+    if (_startingLive) return;
+    final startLive = widget.onStartLive;
+    if (startLive == null) return;
+    setState(() => _startingLive = true);
+    try {
+      await startLive(event);
+    } finally {
+      if (mounted) {
+        setState(() => _startingLive = false);
       }
     }
   }

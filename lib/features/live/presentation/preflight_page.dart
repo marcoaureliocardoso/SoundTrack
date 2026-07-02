@@ -27,6 +27,7 @@ class _PreflightPageState extends State<PreflightPage> {
   PreflightResult? _result;
   Object? _failure;
   var _checking = false;
+  var _entering = false;
   var _generation = 0;
 
   @override
@@ -53,7 +54,7 @@ class _PreflightPageState extends State<PreflightPage> {
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
-            onPressed: _check,
+            onPressed: _checking ? null : _check,
             icon: const Icon(Icons.refresh),
             label: const Text('Reverificar'),
           ),
@@ -75,7 +76,7 @@ class _PreflightPageState extends State<PreflightPage> {
             ..._buildGroups(_result!),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: _enter,
+              onPressed: _entering ? null : _enter,
               icon: const Icon(Icons.play_arrow),
               label: Text(
                 _result!.hasErrors
@@ -127,6 +128,7 @@ class _PreflightPageState extends State<PreflightPage> {
   }
 
   Future<void> _check() async {
+    if (_checking) return;
     final generation = ++_generation;
     setState(() {
       _checking = true;
@@ -151,34 +153,50 @@ class _PreflightPageState extends State<PreflightPage> {
 
   Future<void> _enter() async {
     final result = _result;
-    if (result == null || _checking) return;
-    if (result.hasErrors) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Confirmar entrada'),
-          content: const Text(
-            'Há erros na verificação. Entrar mesmo assim pode deixar '
-            'momentos sem áudio. Deseja continuar?',
+    if (result == null || _checking || _entering) return;
+    setState(() => _entering = true);
+    try {
+      if (result.hasErrors) {
+        var dialogCompleting = false;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Confirmar entrada'),
+            content: const Text(
+              'Há erros na verificação. Entrar mesmo assim pode deixar '
+              'momentos sem áudio. Deseja continuar?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  if (dialogCompleting) return;
+                  dialogCompleting = true;
+                  Navigator.pop(dialogContext, false);
+                },
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (dialogCompleting) return;
+                  dialogCompleting = true;
+                  Navigator.pop(dialogContext, true);
+                },
+                child: const Text('Entrar no Modo Evento'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Entrar no Modo Evento'),
-            ),
-          ],
+        );
+        if (confirmed != true || !mounted) return;
+      }
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (context) => widget.dashboardBuilder(context, widget.event),
         ),
       );
-      if (confirmed != true || !mounted) return;
+    } finally {
+      if (mounted) {
+        setState(() => _entering = false);
+      }
     }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (context) => widget.dashboardBuilder(context, widget.event),
-      ),
-    );
   }
 }
