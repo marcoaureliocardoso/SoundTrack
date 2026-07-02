@@ -6,6 +6,7 @@ import '../../events/domain/event_moment.dart';
 import '../../events/domain/soundtrack_event.dart';
 import '../../playback/application/live_playback_port.dart';
 import '../../playback/domain/playback_alert.dart';
+import '../../playback/domain/playback_snapshot.dart';
 import 'live_event_state.dart';
 
 class LiveEventController {
@@ -32,7 +33,13 @@ class LiveEventController {
   final ValueNotifier<LiveEventState> state;
 
   late final StreamSubscription<PlaybackAlert> _alertSubscription;
+  final Map<String, Future<void>> _pendingStarts = {};
+  Future<void>? _transportCommand;
+  Future<void>? _narrationCommand;
+  Future<void>? _restoreCommand;
   Future<void>? _disposeFuture;
+  String? _sourceFailureMomentId;
+  bool _sourceRecoveryArmed = false;
   bool _disposed = false;
 
   Future<void> startMoment(String momentId) {
@@ -42,6 +49,10 @@ class LiveEventController {
     final current = state.value;
     if (current.playback.activeMomentId == momentId) {
       return Future<void>.value();
+    }
+    final pendingStart = _pendingStarts[momentId];
+    if (pendingStart != null) {
+      return pendingStart;
     }
 
     final moment = _momentById(momentId);
@@ -59,7 +70,13 @@ class LiveEventController {
     final activeMoment = current.activeMoment;
     final pending = <Future<void>>[];
     if (current.playback.narrationActive && activeMoment?.id != moment.id) {
-      pending.add(Future<void>.sync(() => _playback.setNarration(false)));
+      pending.add(
+        _invokeAndReport(
+          () => _playback.setNarration(false),
+          'Não foi possível desativar a Narração.',
+          momentId: activeMoment?.id,
+        ),
+      );
     }
 
     final request = MomentPlaybackRequest(
@@ -74,24 +91,43 @@ class LiveEventController {
       fadeOut: activeMoment?.fadeOut ?? current.event.audioSettings.fadeOut,
     );
     pending.add(_startAndReportFailure(request));
-    return _waitForAll(pending);
+    late final Future<void> command;
+    command = _waitForAll(pending).whenComplete(() {
+      if (identical(_pendingStarts[momentId], command)) {
+        _pendingStarts.remove(momentId);
+      }
+    });
+    _pendingStarts[momentId] = command;
+    return command;
   }
 
-  Future<void> pause() => _invoke(_playback.pause);
+  Future<void> pause() =>
+      _runTransport(_playback.pause, 'Não foi possível pausar a reprodução.');
 
-  Future<void> resume() => _invoke(_playback.resume);
+  Future<void> resume() =>
+      _runTransport(_playback.resume, 'Não foi possível retomar a reprodução.');
 
   Future<void> stop({required bool confirmed}) {
     if (!confirmed) {
       return Future<void>.value();
     }
-    return _invoke(_playback.stop);
+    return _invokeAndReport(
+      _playback.stop,
+      'Não foi possível parar a reprodução.',
+    );
   }
 
   Future<void> confirmStop() => stop(confirmed: true);
 
   Future<void> setNarration(bool active) {
-    return _invoke(() {
+    if (_disposed) {
+      return Future<void>.value();
+    }
+    final pending = _narrationCommand;
+    if (pending != null) {
+      return pending;
+    }
+    final command = Future<void>.sync(() {
       final moment = state.value.activeMoment;
       if (moment == null || !moment.narrationEnabled) {
         _publishSourceUnavailable(
@@ -102,8 +138,20 @@ class LiveEventController {
         );
         return Future<void>.value();
       }
-      return _playback.setNarration(active);
+      return _invokeAndReport(
+        () => _playback.setNarration(active),
+        'Não foi possível alterar a Narração.',
+        momentId: moment.id,
+      );
     });
+    late final Future<void> tracked;
+    tracked = command.whenComplete(() {
+      if (identical(_narrationCommand, tracked)) {
+        _narrationCommand = null;
+      }
+    });
+    _narrationCommand = tracked;
+    return tracked;
   }
 
   Future<void> setSessionVolumes({
@@ -111,17 +159,37 @@ class LiveEventController {
     required double musicVolume,
     required double narrationVolume,
   }) {
-    return _invoke(
+    return _invokeAndReport(
       () => _playback.setSessionVolumes(
         masterVolume: masterVolume,
         musicVolume: musicVolume,
         narrationVolume: narrationVolume,
       ),
+      'Não foi possível ajustar os volumes.',
     );
   }
 
-  Future<void> restorePresetVolumes() =>
-      _invoke(_playback.restorePresetVolumes);
+  Future<void> restorePresetVolumes() {
+    if (_disposed) {
+      return Future<void>.value();
+    }
+    final pending = _restoreCommand;
+    if (pending != null) {
+      return pending;
+    }
+    late final Future<void> command;
+    command =
+        _invokeAndReport(
+          _playback.restorePresetVolumes,
+          'Não foi possível restaurar os volumes.',
+        ).whenComplete(() {
+          if (identical(_restoreCommand, command)) {
+            _restoreCommand = null;
+          }
+        });
+    _restoreCommand = command;
+    return command;
+  }
 
   void dismissAlert() {
     _publishState(state.value.copyWith(clearVisibleAlert: true));
@@ -150,11 +218,44 @@ class LiveEventController {
     return result;
   }
 
-  Future<void> _invoke(Future<void> Function() command) {
+  Future<void> _invokeAndReport(
+    Future<void> Function() command,
+    String message, {
+    String? momentId,
+  }) async {
+    if (_disposed) {
+      return;
+    }
+    try {
+      await Future<void>.sync(command);
+    } catch (error, stackTrace) {
+      _publish(
+        PlaybackAlert(
+          PlaybackAlertCode.sourceFailed,
+          message,
+          momentId: momentId,
+        ),
+      );
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<void> _runTransport(Future<void> Function() command, String message) {
     if (_disposed) {
       return Future<void>.value();
     }
-    return Future<void>.sync(command);
+    final pending = _transportCommand;
+    if (pending != null) {
+      return pending;
+    }
+    late final Future<void> tracked;
+    tracked = _invokeAndReport(command, message).whenComplete(() {
+      if (identical(_transportCommand, tracked)) {
+        _transportCommand = null;
+      }
+    });
+    _transportCommand = tracked;
+    return tracked;
   }
 
   Future<void> _startAndReportFailure(MomentPlaybackRequest request) async {
@@ -200,11 +301,25 @@ class LiveEventController {
     final current = state.value;
     final snapshot = _playback.snapshot.value;
     final alert = current.visibleAlert;
-    final recoveredFromSourceFailure =
-        snapshot.playing &&
-        snapshot.activeMomentId != null &&
+    final matchingTrackedFailure =
         alert?.code == PlaybackAlertCode.sourceFailed &&
+        alert?.momentId != null &&
+        alert?.momentId == _sourceFailureMomentId &&
         alert?.momentId == snapshot.activeMomentId;
+    if (matchingTrackedFailure &&
+        (snapshot.phase == PlaybackPhase.loading ||
+            snapshot.phase == PlaybackPhase.transitioning)) {
+      _sourceRecoveryArmed = true;
+    }
+    final recoveredFromSourceFailure =
+        matchingTrackedFailure &&
+        _sourceRecoveryArmed &&
+        snapshot.phase == PlaybackPhase.playing &&
+        snapshot.playing;
+    if (recoveredFromSourceFailure) {
+      _sourceFailureMomentId = null;
+      _sourceRecoveryArmed = false;
+    }
     _publishState(
       current.copyWith(
         playback: snapshot,
@@ -214,6 +329,11 @@ class LiveEventController {
   }
 
   void _onAlert(PlaybackAlert alert) {
+    if (alert.code == PlaybackAlertCode.sourceFailed &&
+        alert.momentId != null) {
+      _sourceFailureMomentId = alert.momentId;
+      _sourceRecoveryArmed = false;
+    }
     _publish(alert);
   }
 

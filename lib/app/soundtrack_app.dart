@@ -68,6 +68,8 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
                   checkedEvent,
                 ),
                 outputRouteLabel: outputRouteLabel,
+                readOutputRoute:
+                    widget.dependencies.systemStatus.outputRouteLabel,
               ),
         ),
         audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)

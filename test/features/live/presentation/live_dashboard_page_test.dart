@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/live/application/live_event_controller.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
+import 'package:soundtrack/features/live/presentation/widgets/emergency_volume_panel.dart';
+import 'package:soundtrack/features/live/presentation/widgets/moment_action_button.dart';
 import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
@@ -95,6 +98,8 @@ void main() {
     tester,
   ) async {
     final harness = await _pumpDashboard(tester);
+    final releasePause = Completer<void>();
+    harness.playback.onPause = () => releasePause.future;
     harness.playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
         .copyWith(
           phase: PlaybackPhase.playing,
@@ -104,9 +109,25 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.byKey(pausePlaybackKey));
+    await tester.tap(find.byKey(pausePlaybackKey));
     await tester.pump();
     expect(harness.playback.pauseCalls, 1);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: find.byKey(pausePlaybackKey),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    releasePause.complete();
+    await tester.pump();
 
+    final releaseResume = Completer<void>();
+    harness.playback.onResume = () => releaseResume.future;
     harness.playback.snapshotNotifier.value = harness
         .playback
         .snapshotNotifier
@@ -114,13 +135,25 @@ void main() {
         .copyWith(phase: PlaybackPhase.paused, playing: false);
     await tester.pump();
     await tester.tap(find.byKey(pausePlaybackKey));
+    await tester.tap(find.byKey(pausePlaybackKey));
     await tester.pump();
     expect(harness.playback.resumeCalls, 1);
+    releaseResume.complete();
+    await tester.pump();
 
+    final releaseNarration = Completer<void>();
+    harness.playback.onSetNarration = (_) => releaseNarration.future;
     expect(find.text('Narração inativa'), findsOneWidget);
+    await tester.tap(find.byKey(narrationKey));
     await tester.tap(find.byKey(narrationKey));
     await tester.pump();
     expect(harness.playback.commands.last, 'narration:true');
+    expect(
+      tester.widget<FilterChip>(find.byKey(narrationKey)).onSelected,
+      isNull,
+    );
+    releaseNarration.complete();
+    await tester.pump();
     harness.playback.snapshotNotifier.value = harness
         .playback
         .snapshotNotifier
@@ -138,29 +171,62 @@ void main() {
     expect(find.textContaining('Música'), findsOneWidget);
     expect(find.textContaining('Narração'), findsWidgets);
 
-    tester.widget<Slider>(find.byType(Slider).at(0)).onChanged!(25);
+    final releaseFirstVolumes = Completer<void>();
+    var volumeCalls = 0;
+    harness.playback.onSetSessionVolumes = (_, _, _) {
+      volumeCalls++;
+      return volumeCalls == 1 ? releaseFirstVolumes.future : Future.value();
+    };
+    final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
+    sliders[0].onChanged!(25);
+    sliders[1].onChanged!(60);
+    sliders[0].onChanged!(30);
+    sliders[0].onChanged!(35);
+    sliders[0].onChanged!(40);
     await tester.pump();
+    expect(find.text('Master — 40%'), findsOneWidget);
+    expect(find.text('Música — 60%'), findsOneWidget);
+    expect(harness.playback.sessionVolumes, hasLength(1));
     expect(harness.playback.sessionVolumes.last.master, .25);
     expect(harness.playback.sessionVolumes.last.music, 1);
     expect(harness.playback.sessionVolumes.last.narration, .25);
 
-    tester.widget<Slider>(find.byType(Slider).at(1)).onChanged!(60);
+    harness.playback.snapshotNotifier.value = harness
+        .playback
+        .snapshotNotifier
+        .value
+        .copyWith(masterVolume: .3);
     await tester.pump();
-    expect(harness.playback.sessionVolumes.last.master, .8);
+    expect(find.text('Master — 40%'), findsOneWidget);
+    expect(find.text('Música — 60%'), findsOneWidget);
+
+    releaseFirstVolumes.complete();
+    await tester.pumpAndSettle();
+    expect(harness.playback.sessionVolumes, hasLength(2));
+    expect(harness.playback.sessionVolumes.last.master, .4);
     expect(harness.playback.sessionVolumes.last.music, .6);
     expect(harness.playback.sessionVolumes.last.narration, .25);
 
-    tester.widget<Slider>(find.byType(Slider).at(2)).onChanged!(40);
-    await tester.pump();
-    expect(harness.playback.sessionVolumes.last.master, .8);
-    expect(harness.playback.sessionVolumes.last.music, 1);
-    expect(harness.playback.sessionVolumes.last.narration, .4);
-
+    final releaseRestore = Completer<void>();
+    harness.playback.onRestorePresetVolumes = () => releaseRestore.future;
     await tester.ensureVisible(find.text('Restaurar predefinições'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restaurar predefinições'));
     await tester.pump();
     expect(harness.playback.restoreCalls, 1);
+    expect(
+      tester
+          .widget<TextButton>(
+            find.ancestor(
+              of: find.text('Restaurar predefinições'),
+              matching: find.byType(TextButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    releaseRestore.complete();
+    await tester.pump();
 
     await harness.dispose(tester);
   });
@@ -269,6 +335,243 @@ void main() {
 
     await harness.dispose(tester);
   });
+
+  testWidgets('command failures become banners without unhandled UI errors', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    harness.playback.onStartMoment = (_) =>
+        Future<void>.error(StateError('start failed'));
+
+    await tester.tap(find.byKey(liveMomentKey('ready')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('Não foi possível iniciar o áudio deste momento.'),
+      findsOneWidget,
+    );
+
+    await harness.dispose(tester);
+  });
+
+  testWidgets('pending moment command blocks only its own repeated taps', (
+    tester,
+  ) async {
+    final playback = FakeLivePlaybackPort();
+    final release = Completer<void>();
+    playback.onStartMoment = (_) => release.future;
+    final controller = LiveEventController(
+      event: _largeEvent(2),
+      playback: playback,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Alto-falante',
+        ),
+      ),
+    );
+    final first = tester.widget<FilledButton>(
+      find.descendant(
+        of: find.byKey(liveMomentKey('moment-0')),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    final second = tester.widget<FilledButton>(
+      find.descendant(
+        of: find.byKey(liveMomentKey('moment-1')),
+        matching: find.byType(FilledButton),
+      ),
+    );
+
+    first.onPressed!();
+    first.onPressed!();
+    second.onPressed!();
+    await tester.pump();
+
+    expect(playback.requests.map((request) => request.momentId), [
+      'moment-0',
+      'moment-1',
+    ]);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.descendant(
+              of: find.byKey(liveMomentKey('moment-0')),
+              matching: find.byType(FilledButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.descendant(
+              of: find.byKey(liveMomentKey('moment-1')),
+              matching: find.byType(FilledButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    release.complete();
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'route alerts refresh single-flight and keep only latest result',
+    (tester) async {
+      final playback = FakeLivePlaybackPort();
+      final controller = LiveEventController(
+        event: _event(),
+        playback: playback,
+      );
+      final firstRead = Completer<String>();
+      var reads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LiveDashboardPage(
+            controller: controller,
+            outputRouteLabel: 'Bluetooth JBL',
+            readOutputRoute: () {
+              reads++;
+              return reads == 1
+                  ? firstRead.future
+                  : Future.value('USB Focusrite');
+            },
+          ),
+        ),
+      );
+
+      playback.alertController.add(
+        const PlaybackAlert(PlaybackAlertCode.routeChanged, 'Rota 1'),
+      );
+      await tester.pump();
+      playback.alertController.add(
+        const PlaybackAlert(PlaybackAlertCode.routeChanged, 'Rota 2'),
+      );
+      await tester.pump();
+      expect(reads, 1);
+
+      firstRead.complete('Rota obsoleta');
+      await tester.pumpAndSettle();
+
+      expect(reads, 2);
+      expect(find.text('USB Focusrite'), findsOneWidget);
+      expect(find.text('Rota obsoleta'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('route refresh failure shows a clear fallback', (tester) async {
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(event: _event(), playback: playback);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Bluetooth JBL',
+          readOutputRoute: () => Future<String>.error(StateError('route')),
+        ),
+      ),
+    );
+
+    playback.alertController.add(
+      const PlaybackAlert(PlaybackAlertCode.routeChanged, 'Rota mudou'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saída não confirmada'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('position ticks do not rebuild moment cards or volume panel', (
+    tester,
+  ) async {
+    final playback = FakeLivePlaybackPort();
+    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+      activeMomentId: 'ready',
+      phase: PlaybackPhase.playing,
+      playing: true,
+    );
+    final controller = LiveEventController(event: _event(), playback: playback);
+    var momentBuilds = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Bluetooth JBL',
+          momentBuilder: (context, number, moment, status, onStart) {
+            momentBuilds++;
+            return MomentActionButton(
+              key: liveMomentKey(moment.id),
+              number: number,
+              moment: moment,
+              status: status,
+              onPressed: onStart,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    final panelBefore = tester.widget(find.byType(EmergencyVolumePanel));
+    final buildsBefore = momentBuilds;
+
+    playback.snapshotNotifier.value = playback.snapshotNotifier.value.copyWith(
+      position: const Duration(seconds: 30),
+    );
+    await tester.pump();
+
+    expect(momentBuilds, buildsBefore);
+    expect(
+      identical(tester.widget(find.byType(EmergencyVolumePanel)), panelBefore),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('large event builds only moment cards near the viewport', (
+    tester,
+  ) async {
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _largeEvent(100),
+      playback: playback,
+    );
+    var momentBuilds = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Alto-falante',
+          momentBuilder: (context, number, moment, status, onStart) {
+            momentBuilds++;
+            return MomentActionButton(
+              key: liveMomentKey(moment.id),
+              number: number,
+              moment: moment,
+              status: status,
+              onPressed: onStart,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(momentBuilds, greaterThan(0));
+    expect(momentBuilds, lessThan(20));
+    await tester.pumpWidget(const SizedBox());
+  });
 }
 
 Future<_Harness> _pumpDashboard(WidgetTester tester) async {
@@ -318,6 +621,28 @@ SoundTrackEvent _event() {
     id: 'event',
     name: 'Formatura',
   ).addMoment(ready).addMoment(pending);
+}
+
+SoundTrackEvent _largeEvent(int count) {
+  var event = SoundTrackEvent.create(id: 'large', name: 'Evento grande');
+  for (var index = 0; index < count; index++) {
+    event = event.addMoment(
+      EventMoment.create(
+        id: 'moment-$index',
+        position: index,
+        name: 'Momento $index',
+      ).copyWith(
+        audio: AudioReference(
+          uri: 'content://moment-$index',
+          displayName: 'track-$index.mp3',
+          pending: false,
+          artist: null,
+          duration: const Duration(minutes: 3),
+        ),
+      ),
+    );
+  }
+  return event;
 }
 
 final class _Harness {

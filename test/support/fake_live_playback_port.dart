@@ -14,7 +14,13 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
   final commands = <String>[];
   final sessionVolumes = <({double master, double music, double narration})>[];
   Future<void> Function(MomentPlaybackRequest request)? onStartMoment;
+  Future<void> Function()? onPause;
+  Future<void> Function()? onResume;
+  Future<void> Function()? onStop;
   Future<void> Function(bool active)? onSetNarration;
+  Future<void> Function(double master, double music, double narration)?
+  onSetSessionVolumes;
+  Future<void> Function()? onRestorePresetVolumes;
   var disposeCalls = 0;
   var pauseCalls = 0;
   var resumeCalls = 0;
@@ -38,18 +44,21 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
   Future<void> pause() async {
     pauseCalls++;
     commands.add('pause');
+    await onPause?.call();
   }
 
   @override
   Future<void> resume() async {
     resumeCalls++;
     commands.add('resume');
+    await onResume?.call();
   }
 
   @override
   Future<void> stop() async {
     stopCalls++;
     commands.add('stop');
+    await onStop?.call();
   }
 
   @override
@@ -70,12 +79,14 @@ final class FakeLivePlaybackPort implements LivePlaybackPort {
       narration: narrationVolume,
     ));
     commands.add('volumes');
+    await onSetSessionVolumes?.call(masterVolume, musicVolume, narrationVolume);
   }
 
   @override
   Future<void> restorePresetVolumes() async {
     restoreCalls++;
     commands.add('restore');
+    await onRestorePresetVolumes?.call();
   }
 
   @override

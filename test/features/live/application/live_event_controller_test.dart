@@ -273,6 +273,79 @@ void main() {
       },
     );
 
+    test(
+      'coalesces duplicate starts only for the same pending moment',
+      () async {
+        final playback = FakeLivePlaybackPort();
+        final release = Completer<void>();
+        playback.onStartMoment = (_) => release.future;
+        final controller = LiveEventController(
+          event: _event(),
+          playback: playback,
+        );
+
+        final first = controller.startMoment('first');
+        final duplicate = controller.startMoment('first');
+        final different = controller.startMoment('second');
+
+        expect(playback.requests.map((request) => request.momentId), [
+          'first',
+          'second',
+        ]);
+
+        release.complete();
+        await Future.wait([first, duplicate, different]);
+        await controller.dispose();
+      },
+    );
+
+    test('serializes each transport narration and restore command', () async {
+      final playback = FakeLivePlaybackPort();
+      final releasePause = Completer<void>();
+      final releaseNarration = Completer<void>();
+      final releaseRestore = Completer<void>();
+      playback.onPause = () => releasePause.future;
+      playback.onSetNarration = (_) => releaseNarration.future;
+      playback.onRestorePresetVolumes = () => releaseRestore.future;
+      playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+        activeMomentId: 'first',
+      );
+      final controller = LiveEventController(
+        event: _event(),
+        playback: playback,
+      );
+
+      final pause = controller.pause();
+      final duplicatePause = controller.pause();
+      final blockedResume = controller.resume();
+      final narration = controller.setNarration(true);
+      final duplicateNarration = controller.setNarration(true);
+      final restore = controller.restorePresetVolumes();
+      final duplicateRestore = controller.restorePresetVolumes();
+
+      expect(playback.pauseCalls, 1);
+      expect(playback.resumeCalls, 0);
+      expect(
+        playback.commands.where((command) => command == 'narration:true'),
+        hasLength(1),
+      );
+      expect(playback.restoreCalls, 1);
+
+      releasePause.complete();
+      releaseNarration.complete();
+      releaseRestore.complete();
+      await Future.wait([
+        pause,
+        duplicatePause,
+        blockedResume,
+        narration,
+        duplicateNarration,
+        restore,
+        duplicateRestore,
+      ]);
+      await controller.dispose();
+    });
+
     test('dispatches confirmed stop while a start is pending', () async {
       final playback = FakeLivePlaybackPort();
       final startEntered = Completer<void>();
@@ -340,6 +413,84 @@ void main() {
       );
       await controller.dispose();
     });
+
+    test(
+      'publishes and rethrows failures from every delegated command',
+      () async {
+        final failure = StateError('delegate failed');
+        final cases =
+            <
+              (
+                String,
+                void Function(FakeLivePlaybackPort),
+                Future<void> Function(LiveEventController),
+              )
+            >[
+              (
+                'pause',
+                (playback) => playback.onPause = () => Future.error(failure),
+                (controller) => controller.pause(),
+              ),
+              (
+                'resume',
+                (playback) => playback.onResume = () => Future.error(failure),
+                (controller) => controller.resume(),
+              ),
+              (
+                'stop',
+                (playback) => playback.onStop = () => Future.error(failure),
+                (controller) => controller.confirmStop(),
+              ),
+              (
+                'narration',
+                (playback) =>
+                    playback.onSetNarration = (_) => Future.error(failure),
+                (controller) => controller.setNarration(true),
+              ),
+              (
+                'volumes',
+                (playback) =>
+                    playback.onSetSessionVolumes = (_, _, _) =>
+                        Future.error(failure),
+                (controller) => controller.setSessionVolumes(
+                  masterVolume: .1,
+                  musicVolume: .2,
+                  narrationVolume: .3,
+                ),
+              ),
+              (
+                'restore',
+                (playback) =>
+                    playback.onRestorePresetVolumes = () =>
+                        Future.error(failure),
+                (controller) => controller.restorePresetVolumes(),
+              ),
+            ];
+
+        for (final commandCase in cases) {
+          final playback = FakeLivePlaybackPort();
+          playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
+              .copyWith(activeMomentId: 'first');
+          commandCase.$2(playback);
+          final controller = LiveEventController(
+            event: _event(),
+            playback: playback,
+          );
+
+          await expectLater(
+            commandCase.$3(controller),
+            throwsA(same(failure)),
+            reason: commandCase.$1,
+          );
+          expect(
+            controller.state.value.visibleAlert?.code,
+            PlaybackAlertCode.sourceFailed,
+            reason: commandCase.$1,
+          );
+          await controller.dispose();
+        }
+      },
+    );
   });
 
   group('LiveEventController lifecycle', () {
@@ -361,7 +512,7 @@ void main() {
     });
 
     test(
-      'clears only a matching stale source failure after retry succeeds',
+      'clears source failure only after a later loading then playing cycle',
       () async {
         final playback = FakeLivePlaybackPort();
         final controller = LiveEventController(
@@ -386,7 +537,30 @@ void main() {
               phase: PlaybackPhase.playing,
               playing: true,
               activeMomentId: 'first',
+              position: const Duration(seconds: 1),
             );
+
+        expect(
+          controller.state.value.visibleAlert?.code,
+          PlaybackAlertCode.sourceFailed,
+        );
+
+        playback.snapshotNotifier.value = playback.snapshotNotifier.value
+            .copyWith(phase: PlaybackPhase.paused, playing: false);
+        expect(
+          controller.state.value.visibleAlert?.code,
+          PlaybackAlertCode.sourceFailed,
+        );
+
+        playback.snapshotNotifier.value = playback.snapshotNotifier.value
+            .copyWith(phase: PlaybackPhase.loading, playing: false);
+        expect(
+          controller.state.value.visibleAlert?.code,
+          PlaybackAlertCode.sourceFailed,
+        );
+
+        playback.snapshotNotifier.value = playback.snapshotNotifier.value
+            .copyWith(phase: PlaybackPhase.playing, playing: true);
 
         expect(
           controller.state.value.momentStatus('first'),

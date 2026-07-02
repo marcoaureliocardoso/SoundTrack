@@ -1,11 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../playback/domain/playback_snapshot.dart';
 import '../live_dashboard_keys.dart';
 
-class PlaybackControls extends StatelessWidget {
+class PlaybackControls extends StatefulWidget {
   const PlaybackControls({
     required this.playback,
     required this.narrationAvailable,
@@ -24,7 +22,17 @@ class PlaybackControls extends StatelessWidget {
   final Future<void> Function(bool active) onNarrationChanged;
 
   @override
+  State<PlaybackControls> createState() => _PlaybackControlsState();
+}
+
+class _PlaybackControlsState extends State<PlaybackControls> {
+  var _transportBusy = false;
+  var _narrationBusy = false;
+  var _stopBusy = false;
+
+  @override
   Widget build(BuildContext context) {
+    final playback = widget.playback;
     final hasCurrent = playback.activeMomentId != null;
     final paused = playback.phase == PlaybackPhase.paused;
     return Card(
@@ -40,21 +48,22 @@ class PlaybackControls extends StatelessWidget {
               key: pausePlaybackKey,
               icon: paused ? Icons.play_arrow : Icons.pause,
               label: paused ? 'Retomar' : 'Pausar',
-              onPressed: hasCurrent
-                  ? () => unawaited(paused ? onResume() : onPause())
+              onPressed: hasCurrent && !_transportBusy
+                  ? () =>
+                        _runTransport(paused ? widget.onResume : widget.onPause)
                   : null,
             ),
             _Control(
               key: stopPlaybackKey,
               icon: Icons.stop,
               label: 'Parar',
-              onPressed: hasCurrent ? () => unawaited(onStop()) : null,
+              onPressed: hasCurrent && !_stopBusy ? _runStop : null,
             ),
             Semantics(
               label: playback.narrationActive
                   ? 'Narração ativa'
                   : 'Narração inativa',
-              enabled: narrationAvailable,
+              enabled: widget.narrationAvailable && !_narrationBusy,
               child: FilterChip(
                 key: narrationKey,
                 avatar: const Icon(Icons.mic, size: 20),
@@ -64,8 +73,8 @@ class PlaybackControls extends StatelessWidget {
                       : 'Narração inativa',
                 ),
                 selected: playback.narrationActive,
-                onSelected: narrationAvailable
-                    ? (active) => unawaited(onNarrationChanged(active))
+                onSelected: widget.narrationAvailable && !_narrationBusy
+                    ? _runNarration
                     : null,
               ),
             ),
@@ -73,6 +82,48 @@ class PlaybackControls extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _runTransport(Future<void> Function() command) async {
+    if (_transportBusy) return;
+    setState(() => _transportBusy = true);
+    try {
+      await command();
+    } catch (_) {
+      // The controller publishes the operator-facing alert.
+    } finally {
+      if (mounted) {
+        setState(() => _transportBusy = false);
+      }
+    }
+  }
+
+  Future<void> _runNarration(bool active) async {
+    if (_narrationBusy) return;
+    setState(() => _narrationBusy = true);
+    try {
+      await widget.onNarrationChanged(active);
+    } catch (_) {
+      // The controller publishes the operator-facing alert.
+    } finally {
+      if (mounted) {
+        setState(() => _narrationBusy = false);
+      }
+    }
+  }
+
+  Future<void> _runStop() async {
+    if (_stopBusy) return;
+    setState(() => _stopBusy = true);
+    try {
+      await widget.onStop();
+    } catch (_) {
+      // The controller publishes the operator-facing alert.
+    } finally {
+      if (mounted) {
+        setState(() => _stopBusy = false);
+      }
+    }
   }
 }
 

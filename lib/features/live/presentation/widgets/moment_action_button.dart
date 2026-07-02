@@ -9,6 +9,7 @@ class MomentActionButton extends StatelessWidget {
     required this.moment,
     required this.status,
     required this.onPressed,
+    this.commandEnabled = true,
     super.key,
   });
 
@@ -16,6 +17,7 @@ class MomentActionButton extends StatelessWidget {
   final EventMoment moment;
   final MomentStatus status;
   final VoidCallback onPressed;
+  final bool commandEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +27,7 @@ class MomentActionButton extends StatelessWidget {
       MomentStatus.error => 'ERRO NO ÁUDIO',
       MomentStatus.ready => 'TOQUE PARA INICIAR',
     };
-    final enabled = status == MomentStatus.ready;
+    final enabled = status == MomentStatus.ready && commandEnabled;
     final track = moment.audio?.displayName ?? 'Sem faixa vinculada';
     final colors = Theme.of(context).colorScheme;
 
