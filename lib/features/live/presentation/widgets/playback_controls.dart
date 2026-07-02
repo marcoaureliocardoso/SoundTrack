@@ -61,6 +61,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       button: true,
       toggled: playback.narrationActive,
       enabled: widget.narrationAvailable && !_narrationBusy,
+      excludeSemantics: true,
       child: Material(
         color: playback.narrationActive
             ? Theme.of(context).colorScheme.secondaryContainer

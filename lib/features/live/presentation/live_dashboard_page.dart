@@ -45,6 +45,8 @@ class LiveDashboardPage extends StatefulWidget {
 }
 
 class _LiveDashboardPageState extends State<LiveDashboardPage> {
+  final _playbackControlsSelectorKey = GlobalKey();
+  final _emergencyVolumesSelectorKey = GlobalKey();
   late final ValueNotifier<String> _outputRouteLabel;
   PlaybackAlert? _observedAlert;
   var _routeGeneration = 0;
@@ -272,6 +274,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
 
   Widget _buildControls({required bool compact}) {
     return _LiveStateSelector<_ControlsSlice>(
+      key: _playbackControlsSelectorKey,
       state: widget.controller.state,
       select: _selectControls,
       builder: (context, _) {
@@ -291,6 +294,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
 
   Widget _buildVolumes({required bool expanded, required bool compact}) {
     return _LiveStateSelector<_VolumesSlice>(
+      key: _emergencyVolumesSelectorKey,
       state: widget.controller.state,
       select: _selectVolumes,
       builder: (context, _) {
@@ -544,6 +548,7 @@ class _LiveStateSelector<T> extends StatefulWidget {
     required this.state,
     required this.select,
     required this.builder,
+    super.key,
   });
 
   final ValueListenable<LiveEventState> state;

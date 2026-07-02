@@ -284,6 +284,82 @@ void main() {
     await harness.dispose(tester);
   });
 
+  testWidgets('volume queue survives collapsing and reopening controls', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    final releaseFirst = Completer<void>();
+    harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+    tester.widgetList<Slider>(find.byType(Slider)).first.onChanged!(20);
+    await tester.pump();
+    expect(harness.playback.sessionVolumes, hasLength(1));
+    final firstMaster = harness.playback.sessionVolumes.single.master;
+
+    await tester.tap(find.text('Volumes de emergência'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Volumes de emergência'));
+    await tester.pumpAndSettle();
+    tester.widgetList<Slider>(find.byType(Slider)).elementAt(1).onChanged!(40);
+    await tester.pump();
+
+    expect(harness.playback.sessionVolumes, hasLength(1));
+    releaseFirst.complete();
+    await tester.pumpAndSettle();
+    expect(harness.playback.sessionVolumes, hasLength(2));
+    expect(harness.playback.sessionVolumes.last.master, firstMaster);
+    expect(harness.playback.sessionVolumes.last.music, .4);
+    expect(harness.playback.sessionVolumes.last.narration, .25);
+
+    await harness.dispose(tester);
+  });
+
+  testWidgets('pending stop stays single flight across layout changes', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    final releaseStop = Completer<void>();
+    harness.playback.onStop = () => releaseStop.future;
+    harness.playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
+        .copyWith(activeMomentId: 'ready');
+    await tester.pump();
+
+    await tester.tap(find.byKey(stopPlaybackKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Parar reprodução'));
+    await tester.pumpAndSettle();
+    expect(harness.playback.stopCalls, 1);
+
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+    final stopAfterLayoutChange = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(stopPlaybackKey),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final stopWasReenabled = stopAfterLayoutChange.onPressed != null;
+    stopAfterLayoutChange.onPressed?.call();
+    await tester.pumpAndSettle();
+    if (find
+        .widgetWithText(FilledButton, 'Parar reprodução')
+        .evaluate()
+        .isNotEmpty) {
+      await tester.tap(find.widgetWithText(FilledButton, 'Parar reprodução'));
+      await tester.pumpAndSettle();
+    }
+    expect(harness.playback.stopCalls, 1);
+    expect(stopWasReenabled, isFalse);
+
+    releaseStop.complete();
+    await tester.pumpAndSettle();
+    await harness.dispose(tester);
+  });
+
   testWidgets(
     'restore cancels queued volumes and runs after in-flight volume',
     (tester) async {

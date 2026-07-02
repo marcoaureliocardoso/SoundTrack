@@ -137,6 +137,10 @@ void main() {
     expect(find.byKey(stopPlaybackKey), findsOneWidget);
     expect(find.byKey(narrationKey), findsOneWidget);
     expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração inativa',
+    );
+    expect(
       tester.getSize(find.byKey(pausePlaybackKey)).height,
       greaterThanOrEqualTo(48),
     );
