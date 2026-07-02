@@ -71,11 +71,14 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: widget.compact ? EdgeInsets.zero : null,
       child: ExpansionTile(
         key: emergencyVolumesKey,
         initiallyExpanded: widget.expanded,
         onExpansionChanged: (_) => widget.onToggle(),
         tilePadding: EdgeInsets.symmetric(horizontal: widget.compact ? 8 : 16),
+        minTileHeight: widget.compact ? 48 : null,
+        dense: widget.compact,
         title: const Text(
           'Volumes de emergência',
           maxLines: 1,

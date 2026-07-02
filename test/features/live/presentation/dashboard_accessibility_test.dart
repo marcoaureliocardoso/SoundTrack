@@ -86,6 +86,51 @@ void main() {
       expect(pending.flagsCollection.isEnabled, Tristate.isFalse);
     },
   );
+
+  testWidgets('expanded emergency volumes fit a short landscape viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(480, 280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _manyMomentsEvent(),
+      playback: playback,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Bluetooth',
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Slider), findsNWidgets(3));
+    await tester.ensureVisible(find.text('Restaurar predefinições'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restaurar predefinições'), findsOneWidget);
+    await tester.tap(find.text('Restaurar predefinições'));
+    await tester.pump();
+    expect(playback.restoreCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 SoundTrackEvent _manyMomentsEvent() {

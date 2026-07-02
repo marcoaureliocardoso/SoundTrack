@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../events/domain/event_moment.dart';
+import '../../events/domain/soundtrack_event.dart';
 import '../../playback/domain/playback_alert.dart';
 import '../../playback/domain/playback_snapshot.dart';
 import '../application/live_event_controller.dart';
@@ -73,6 +74,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
   Widget build(BuildContext context) {
     final event = widget.controller.state.value.event;
     final momentCount = event.moments.length;
+    final shortScreen = MediaQuery.sizeOf(context).height < 360;
     return PopScope<void>(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, _) {
@@ -82,20 +84,31 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(event.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(
-                'Modo Evento',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-            ],
-          ),
+          toolbarHeight: shortScreen ? 48 : null,
+          title: shortScreen
+              ? Text(
+                  '${event.name} • Modo Evento',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'Modo Evento',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ],
+                ),
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(32),
+            preferredSize: Size.fromHeight(shortScreen ? 24 : 32),
             child: SizedBox(
-              height: 32,
+              height: shortScreen ? 24 : 32,
               width: double.infinity,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -125,107 +138,159 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
               final compact =
                   constraints.maxHeight < 650 ||
                   MediaQuery.textScalerOf(context).scale(1) > 1.4;
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  compact ? 4 : 12,
-                  16,
-                  compact ? 4 : 12,
-                ),
-                child: Column(
-                  children: [
-                    _LiveStateSelector<PlaybackAlert?>(
-                      state: widget.controller.state,
-                      select: (state) => state.visibleAlert,
-                      builder: (context, alert) => alert == null
-                          ? const SizedBox.shrink()
-                          : _BoundedPanel(
-                              maxHeight: compact ? 48 : 96,
-                              child: LiveAlertBanner(
-                                alert: alert,
-                                onDismiss: widget.controller.dismissAlert,
-                              ),
-                            ),
-                    ),
-                    _BoundedPanel(
-                      maxHeight: compact ? 52 : 190,
-                      child: _LiveStateSelector<_NowPlayingSlice>(
-                        state: widget.controller.state,
-                        select: _selectNowPlaying,
-                        builder: (context, _) => NowPlayingPanel(
-                          key: nowPlayingPanelKey,
-                          state: widget.controller.state.value,
-                          compact: compact,
-                        ),
+              final veryShort = constraints.maxHeight < 360;
+              return _LiveStateSelector<bool>(
+                state: widget.controller.state,
+                select: (state) => state.controlsExpanded,
+                builder: (context, volumesExpanded) => volumesExpanded
+                    ? _buildExpandedVolumes(compact: compact)
+                    : _buildNormalDashboard(
+                        context: context,
+                        event: event,
+                        momentCount: momentCount,
+                        compact: compact,
+                        veryShort: veryShort,
                       ),
-                    ),
-                    SizedBox(height: compact ? 2 : 8),
-                    SizedBox(
-                      height: compact ? 24 : 32,
-                      width: double.infinity,
-                      child: Text(
-                        'MOMENTOS — TOQUE PARA INICIAR',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        itemCount: momentCount,
-                        itemBuilder: (context, momentIndex) {
-                          final moment = event.moments[momentIndex];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _LiveMomentItem(
-                              controller: widget.controller,
-                              number: momentIndex + 1,
-                              moment: moment,
-                              builder: widget.momentBuilder,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    _LiveStateSelector<_ControlsSlice>(
-                      state: widget.controller.state,
-                      select: _selectControls,
-                      builder: (context, _) {
-                        final state = widget.controller.state.value;
-                        return PlaybackControls(
-                          playback: state.playback,
-                          narrationAvailable: state.narrationAvailable,
-                          onPause: widget.controller.pause,
-                          onResume: widget.controller.resume,
-                          onStop: _confirmStop,
-                          onNarrationChanged: widget.controller.setNarration,
-                          compact: compact,
-                        );
-                      },
-                    ),
-                    _LiveStateSelector<_VolumesSlice>(
-                      state: widget.controller.state,
-                      select: _selectVolumes,
-                      builder: (context, _) {
-                        final state = widget.controller.state.value;
-                        return EmergencyVolumePanel(
-                          expanded: state.controlsExpanded,
-                          playback: state.playback,
-                          onToggle: widget.controller.toggleControlsExpanded,
-                          onVolumesChanged: widget.controller.setSessionVolumes,
-                          onRestore: widget.controller.restorePresetVolumes,
-                          compact: compact,
-                        );
-                      },
-                    ),
-                  ],
-                ),
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildExpandedVolumes({required bool compact}) {
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        children: [
+          _buildAlert(compact: true),
+          Expanded(
+            child: SingleChildScrollView(
+              primary: false,
+              child: _buildVolumes(expanded: true, compact: compact),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNormalDashboard({
+    required BuildContext context,
+    required SoundTrackEvent event,
+    required int momentCount,
+    required bool compact,
+    required bool veryShort,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        veryShort ? 0 : (compact ? 4 : 12),
+        16,
+        veryShort ? 0 : (compact ? 4 : 12),
+      ),
+      child: Column(
+        children: [
+          _buildAlert(compact: compact),
+          _BoundedPanel(
+            maxHeight: veryShort ? 48 : (compact ? 52 : 190),
+            child: _LiveStateSelector<_NowPlayingSlice>(
+              state: widget.controller.state,
+              select: _selectNowPlaying,
+              builder: (context, _) => NowPlayingPanel(
+                key: nowPlayingPanelKey,
+                state: widget.controller.state.value,
+                compact: compact,
+              ),
+            ),
+          ),
+          SizedBox(height: veryShort ? 0 : (compact ? 2 : 8)),
+          SizedBox(
+            height: veryShort ? 28 : (compact ? 24 : 32),
+            width: double.infinity,
+            child: Text(
+              'MOMENTOS — TOQUE PARA INICIAR',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 4),
+              itemCount: momentCount,
+              itemBuilder: (context, momentIndex) {
+                final moment = event.moments[momentIndex];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _LiveMomentItem(
+                    controller: widget.controller,
+                    number: momentIndex + 1,
+                    moment: moment,
+                    builder: widget.momentBuilder,
+                  ),
+                );
+              },
+            ),
+          ),
+          _buildControls(compact: compact || veryShort),
+          _buildVolumes(expanded: false, compact: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlert({required bool compact}) {
+    return _LiveStateSelector<PlaybackAlert?>(
+      state: widget.controller.state,
+      select: (state) => state.visibleAlert,
+      builder: (context, alert) => alert == null
+          ? const SizedBox.shrink()
+          : _BoundedPanel(
+              maxHeight: compact ? 48 : 96,
+              child: LiveAlertBanner(
+                alert: alert,
+                onDismiss: widget.controller.dismissAlert,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildControls({required bool compact}) {
+    return _LiveStateSelector<_ControlsSlice>(
+      state: widget.controller.state,
+      select: _selectControls,
+      builder: (context, _) {
+        final state = widget.controller.state.value;
+        return PlaybackControls(
+          playback: state.playback,
+          narrationAvailable: state.narrationAvailable,
+          onPause: widget.controller.pause,
+          onResume: widget.controller.resume,
+          onStop: _confirmStop,
+          onNarrationChanged: widget.controller.setNarration,
+          compact: compact,
+        );
+      },
+    );
+  }
+
+  Widget _buildVolumes({required bool expanded, required bool compact}) {
+    return _LiveStateSelector<_VolumesSlice>(
+      state: widget.controller.state,
+      select: _selectVolumes,
+      builder: (context, _) {
+        final state = widget.controller.state.value;
+        return EmergencyVolumePanel(
+          expanded: expanded,
+          playback: state.playback,
+          onToggle: widget.controller.toggleControlsExpanded,
+          onVolumesChanged: widget.controller.setSessionVolumes,
+          onRestore: widget.controller.restorePresetVolumes,
+          compact: compact,
+        );
+      },
     );
   }
 

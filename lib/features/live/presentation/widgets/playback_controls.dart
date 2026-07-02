@@ -37,55 +37,105 @@ class _PlaybackControlsState extends State<PlaybackControls> {
     final playback = widget.playback;
     final hasCurrent = playback.activeMomentId != null;
     final paused = playback.phase == PlaybackPhase.paused;
+    final pause = _Control(
+      key: pausePlaybackKey,
+      icon: paused ? Icons.play_arrow : Icons.pause,
+      label: paused ? 'Retomar' : 'Pausar',
+      compact: widget.compact,
+      onPressed: hasCurrent && !_transportBusy
+          ? () => _runTransport(paused ? widget.onResume : widget.onPause)
+          : null,
+    );
+    final stop = _Control(
+      key: stopPlaybackKey,
+      icon: Icons.stop,
+      label: 'Parar',
+      compact: widget.compact,
+      onPressed: hasCurrent && !_stopBusy ? _runStop : null,
+    );
+    final narrationLabel = playback.narrationActive
+        ? 'Narração ativa'
+        : 'Narração inativa';
+    final compactNarration = Semantics(
+      label: narrationLabel,
+      button: true,
+      toggled: playback.narrationActive,
+      enabled: widget.narrationAvailable && !_narrationBusy,
+      child: Material(
+        color: playback.narrationActive
+            ? Theme.of(context).colorScheme.secondaryContainer
+            : Colors.transparent,
+        child: InkWell(
+          key: narrationKey,
+          onTap: widget.narrationAvailable && !_narrationBusy
+              ? () => _runNarration(!playback.narrationActive)
+              : null,
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                const Icon(Icons.mic, size: 20),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    narrationLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final narration = Semantics(
+      label: narrationLabel,
+      enabled: widget.narrationAvailable && !_narrationBusy,
+      child: FilterChip(
+        key: narrationKey,
+        avatar: const Icon(Icons.mic, size: 20),
+        label: Text(
+          narrationLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        selected: playback.narrationActive,
+        visualDensity: widget.compact
+            ? VisualDensity.compact
+            : VisualDensity.standard,
+        onSelected: widget.narrationAvailable && !_narrationBusy
+            ? _runNarration
+            : null,
+      ),
+    );
+    if (widget.compact) {
+      return SizedBox(
+        height: 50,
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: Row(
+            children: [
+              pause,
+              stop,
+              const SizedBox(width: 4),
+              Expanded(child: compactNarration),
+            ],
+          ),
+        ),
+      );
+    }
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(widget.compact ? 2 : 12),
+        padding: const EdgeInsets.all(12),
         child: Wrap(
           alignment: WrapAlignment.spaceEvenly,
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 8,
           runSpacing: 8,
-          children: [
-            _Control(
-              key: pausePlaybackKey,
-              icon: paused ? Icons.play_arrow : Icons.pause,
-              label: paused ? 'Retomar' : 'Pausar',
-              compact: widget.compact,
-              onPressed: hasCurrent && !_transportBusy
-                  ? () =>
-                        _runTransport(paused ? widget.onResume : widget.onPause)
-                  : null,
-            ),
-            _Control(
-              key: stopPlaybackKey,
-              icon: Icons.stop,
-              label: 'Parar',
-              compact: widget.compact,
-              onPressed: hasCurrent && !_stopBusy ? _runStop : null,
-            ),
-            Semantics(
-              label: playback.narrationActive
-                  ? 'Narração ativa'
-                  : 'Narração inativa',
-              enabled: widget.narrationAvailable && !_narrationBusy,
-              child: FilterChip(
-                key: narrationKey,
-                avatar: const Icon(Icons.mic, size: 20),
-                label: Text(
-                  playback.narrationActive
-                      ? 'Narração ativa'
-                      : 'Narração inativa',
-                ),
-                selected: playback.narrationActive,
-                visualDensity: widget.compact
-                    ? VisualDensity.compact
-                    : VisualDensity.standard,
-                onSelected: widget.narrationAvailable && !_narrationBusy
-                    ? _runNarration
-                    : null,
-              ),
-            ),
-          ],
+          children: [pause, stop, narration],
         ),
       ),
     );

@@ -148,10 +148,7 @@ void main() {
     await tester.tap(find.byKey(narrationKey));
     await tester.pump();
     expect(harness.playback.commands.last, 'narration:true');
-    expect(
-      tester.widget<FilterChip>(find.byKey(narrationKey)).onSelected,
-      isNull,
-    );
+    expect(tester.widget<InkWell>(find.byKey(narrationKey)).onTap, isNull);
     releaseNarration.complete();
     await tester.pump();
     harness.playback.snapshotNotifier.value = harness
