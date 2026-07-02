@@ -23,15 +23,9 @@ void main() {
       MaterialApp(home: EventEditorPage(controller: controller)),
     );
 
-    final unavailableModeButton = find.widgetWithText(
-      FilledButton,
-      'Disponível após instalar o motor de áudio',
-    );
-    expect(unavailableModeButton, findsOneWidget);
-    expect(
-      tester.widget<FilledButton>(unavailableModeButton).onPressed,
-      isNull,
-    );
+    final liveModeButton = find.widgetWithText(FilledButton, 'Modo Evento');
+    expect(liveModeButton, findsOneWidget);
+    expect(tester.widget<FilledButton>(liveModeButton).onPressed, isNotNull);
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
@@ -208,6 +202,30 @@ void main() {
 
     expect(find.text('Áudio pendente: Entrada.mp3 • Loop'), findsOneWidget);
     expect(find.text('Entrada.mp3 • Loop'), findsNothing);
+  });
+
+  testWidgets('starts live flow with the exact immutable draft snapshot', (
+    tester,
+  ) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: _validEvent(),
+      newId: () => 'unused',
+    )..rename('Rascunho ao vivo');
+    SoundTrackEvent? snapshot;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventEditorPage(
+          controller: controller,
+          onStartLive: (event) => snapshot = event,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Modo Evento'));
+
+    expect(identical(snapshot, controller.draft), isTrue);
+    expect(controller.dirty, isTrue);
   });
 }
 

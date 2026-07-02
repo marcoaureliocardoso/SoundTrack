@@ -16,11 +16,13 @@ class EventEditorPage extends StatefulWidget {
   const EventEditorPage({
     required this.controller,
     this.onSelectAudio,
+    this.onStartLive,
     super.key,
   });
 
   final EventEditorController controller;
   final Future<AudioReference?> Function()? onSelectAudio;
+  final ValueChanged<SoundTrackEvent>? onStartLive;
 
   @override
   State<EventEditorPage> createState() => _EventEditorPageState();
@@ -124,13 +126,10 @@ class _EventEditorPageState extends State<EventEditorPage> {
               ),
             ],
             const SizedBox(height: 12),
-            Tooltip(
-              message: 'Disponível após instalar o motor de áudio',
-              child: FilledButton.icon(
-                onPressed: null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Disponível após instalar o motor de áudio'),
-              ),
+            FilledButton.icon(
+              onPressed: () => widget.onStartLive?.call(event),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Modo Evento'),
             ),
             const SizedBox(height: 16),
             Text('Momentos', style: Theme.of(context).textTheme.titleLarge),

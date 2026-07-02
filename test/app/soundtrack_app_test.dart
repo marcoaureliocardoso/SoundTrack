@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
+import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
+import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
+import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
+import 'package:soundtrack/features/live/presentation/preflight_page.dart';
+import 'package:soundtrack/platform/system/system_status_gateway.dart';
 
 import '../support/in_memory_event_repository.dart';
 import '../support/fake_live_playback_port.dart';
@@ -57,4 +62,72 @@ void main() {
       contains(debugAudioEngineLabRoute),
     );
   });
+
+  testWidgets('navigates editor to preflight to live dashboard', (
+    tester,
+  ) async {
+    final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
+    final playback = FakeLivePlaybackPort();
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository([event]),
+          newEventId: () => 'unused',
+          newMomentId: () => 'unused',
+          playback: playback,
+          preflightRecords: _Records(),
+          systemStatus: _SystemStatus(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Formatura'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Modo Evento'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PreflightPage), findsOneWidget);
+    expect(playback.commands, isEmpty);
+    await tester.tap(find.text('Iniciar Modo Evento'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LiveDashboardPage), findsOneWidget);
+    expect(find.text('Formatura'), findsOneWidget);
+    expect(playback.commands, isEmpty);
+  });
+}
+
+final class _SystemStatus implements SystemStatusGateway {
+  @override
+  Future<int> batteryPercent() async => 100;
+
+  @override
+  Future<bool> charging() async => true;
+
+  @override
+  Future<bool?> doNotDisturbEnabled() async => true;
+
+  @override
+  Future<double> mediaVolume() async => 1;
+
+  @override
+  Future<String> outputRouteLabel() async => 'Alto-falante';
+
+  @override
+  Future<void> setKeepScreenOn(bool enabled) async {}
+}
+
+final class _Records implements PreflightRecordRepository {
+  @override
+  Future<void> delete(String eventId) async {}
+
+  @override
+  Future<List<PreflightRecord>> findAll() async => const [];
+
+  @override
+  Future<PreflightRecord?> findByEventId(String eventId) async => null;
+
+  @override
+  Future<void> save(PreflightRecord record) async {}
 }

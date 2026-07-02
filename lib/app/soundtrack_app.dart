@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../features/events/application/event_library_controller.dart';
 import '../features/events/application/event_transfer_controller.dart';
 import '../features/events/presentation/event_library_page.dart';
+import '../features/live/presentation/live_dashboard_page.dart';
+import '../features/live/presentation/preflight_page.dart';
 import '../features/playback/presentation/audio_engine_lab_page.dart';
 import 'app_dependencies.dart';
 
@@ -57,6 +59,15 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
         onImport: _transferController.importEvent,
         transferController: _transferController,
         onSelectAudio: _transferController.selectAudio,
+        buildLiveEntryPage: (event) => PreflightPage(
+          event: event,
+          preflightService: widget.dependencies.createPreflightService(),
+          dashboardBuilder: (_, checkedEvent) => LiveDashboardPage(
+            controller: widget.dependencies.createLiveEventController(
+              checkedEvent,
+            ),
+          ),
+        ),
         audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)
             ? debugAudioEngineLabRoute
             : null,

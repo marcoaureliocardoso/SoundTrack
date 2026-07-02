@@ -18,6 +18,7 @@ typedef EventEditorControllerFactory =
     EventEditorController Function(SoundTrackEvent event);
 typedef EventExportCallback = Future<bool> Function(SoundTrackEvent event);
 typedef EventImportCallback = Future<SoundTrackEvent?> Function();
+typedef EventLiveEntryPageBuilder = Widget Function(SoundTrackEvent event);
 const openAudioEngineLabKey = Key('open-audio-engine-lab');
 
 class EventLibraryPage extends StatefulWidget {
@@ -28,6 +29,7 @@ class EventLibraryPage extends StatefulWidget {
     this.onImport,
     this.transferController,
     this.onSelectAudio,
+    this.buildLiveEntryPage,
     this.audioEngineLabRoute,
     super.key,
   });
@@ -38,6 +40,7 @@ class EventLibraryPage extends StatefulWidget {
   final EventImportCallback? onImport;
   final EventTransferController? transferController;
   final Future<AudioReference?> Function()? onSelectAudio;
+  final EventLiveEntryPageBuilder? buildLiveEntryPage;
   final String? audioEngineLabRoute;
 
   @override
@@ -201,6 +204,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
         builder: (context) => EventEditorPage(
           controller: editorController,
           onSelectAudio: widget.onSelectAudio,
+          onStartLive: widget.buildLiveEntryPage == null ? null : _openLive,
         ),
       ),
     );
@@ -208,6 +212,14 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     if (mounted) {
       await widget.controller.load();
     }
+  }
+
+  void _openLive(SoundTrackEvent snapshot) {
+    final builder = widget.buildLiveEntryPage;
+    if (builder == null) return;
+    Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => builder(snapshot)));
   }
 
   Future<void> _import() async {
