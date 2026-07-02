@@ -4,9 +4,10 @@ import '../../application/live_event_state.dart';
 import '../../../playback/domain/playback_snapshot.dart';
 
 class NowPlayingPanel extends StatelessWidget {
-  const NowPlayingPanel({required this.state, super.key});
+  const NowPlayingPanel({required this.state, this.compact = false, super.key});
 
   final LiveEventState state;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -32,18 +33,23 @@ class NowPlayingPanel extends StatelessWidget {
       child: Card(
         color: Theme.of(context).colorScheme.surfaceContainerHigh,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(compact ? 8 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('AGORA', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Text(moment, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 4),
+              SizedBox(height: compact ? 2 : 8),
+              Text(
+                moment,
+                style: compact
+                    ? Theme.of(context).textTheme.titleMedium
+                    : Theme.of(context).textTheme.headlineSmall,
+              ),
+              SizedBox(height: compact ? 2 : 4),
               Text(track, style: Theme.of(context).textTheme.titleMedium),
               if (state.currentAudioArtist case final artist?)
                 Text(artist, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 12),
+              SizedBox(height: compact ? 4 : 12),
               Wrap(
                 spacing: 16,
                 runSpacing: 4,

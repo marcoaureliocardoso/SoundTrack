@@ -263,6 +263,108 @@ void main() {
     await harness.dispose(tester);
   });
 
+  testWidgets('failed volume command rolls UI back to authoritative snapshot', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    harness.playback.onSetSessionVolumes = (_, _, _) =>
+        Future<void>.error(StateError('volume rejected'));
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Master — 80%'), findsOneWidget);
+    expect(find.text('Música — 100%'), findsOneWidget);
+    expect(find.text('Narração — 25%'), findsOneWidget);
+    expect(find.text('Não foi possível ajustar os volumes.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await harness.dispose(tester);
+  });
+
+  testWidgets(
+    'restore cancels queued volumes and runs after in-flight volume',
+    (tester) async {
+      final harness = await _pumpDashboard(tester);
+      final releaseFirst = Completer<void>();
+      harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
+
+      await tester.drag(find.byType(ListView), const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(emergencyVolumesKey));
+      await tester.pumpAndSettle();
+      final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
+      sliders[0].onChanged!(20);
+      sliders[1].onChanged!(40);
+      await tester.pump();
+      await tester.ensureVisible(find.text('Restaurar predefinições'));
+      await tester.tap(find.text('Restaurar predefinições'));
+      await tester.pump();
+
+      expect(harness.playback.commands, ['volumes']);
+      expect(
+        tester
+            .widgetList<Slider>(find.byType(Slider))
+            .every((slider) => slider.onChanged == null),
+        isTrue,
+      );
+
+      releaseFirst.complete();
+      await tester.pumpAndSettle();
+
+      expect(harness.playback.commands, ['volumes', 'restore']);
+      expect(harness.playback.sessionVolumes, hasLength(1));
+
+      harness.playback.snapshotNotifier.value = harness
+          .playback
+          .snapshotNotifier
+          .value
+          .copyWith(masterVolume: .8, musicVolume: 1, narrationVolume: .25);
+      await tester.pump();
+      expect(find.text('Master — 80%'), findsOneWidget);
+      expect(find.text('Música — 100%'), findsOneWidget);
+      expect(find.text('Narração — 25%'), findsOneWidget);
+
+      await harness.dispose(tester);
+    },
+  );
+
+  testWidgets('failed restore rolls back and reenables emergency controls', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    harness.playback.onRestorePresetVolumes = () =>
+        Future<void>.error(StateError('restore rejected'));
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Restaurar predefinições'));
+    await tester.tap(find.text('Restaurar predefinições'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Master — 80%'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<Slider>(find.byType(Slider))
+          .every((slider) => slider.onChanged != null),
+      isTrue,
+    );
+    expect(find.text('Não foi possível restaurar os volumes.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await harness.dispose(tester);
+  });
+
   testWidgets('back requires confirmation and never stops playback', (
     tester,
   ) async {
@@ -570,6 +672,13 @@ void main() {
 
     expect(momentBuilds, greaterThan(0));
     expect(momentBuilds, lessThan(20));
+    expect(find.byKey(pausePlaybackKey), findsOneWidget);
+    expect(find.byKey(emergencyVolumesKey), findsOneWidget);
+    expect(tester.getTopLeft(find.byKey(pausePlaybackKey)).dy, lessThan(600));
+    expect(
+      tester.getTopLeft(find.byKey(emergencyVolumesKey)).dy,
+      lessThan(600),
+    );
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -11,6 +11,7 @@ typedef SessionVolumesChanged =
     });
 
 typedef _Volumes = ({double master, double music, double narration});
+typedef _QueuedVolumes = ({_Volumes volumes, int generation});
 
 class EmergencyVolumePanel extends StatefulWidget {
   const EmergencyVolumePanel({
@@ -19,6 +20,7 @@ class EmergencyVolumePanel extends StatefulWidget {
     required this.onToggle,
     required this.onVolumesChanged,
     required this.onRestore,
+    this.compact = false,
     super.key,
   });
 
@@ -27,6 +29,7 @@ class EmergencyVolumePanel extends StatefulWidget {
   final VoidCallback onToggle;
   final SessionVolumesChanged onVolumesChanged;
   final Future<void> Function() onRestore;
+  final bool compact;
 
   @override
   State<EmergencyVolumePanel> createState() => _EmergencyVolumePanelState();
@@ -34,8 +37,10 @@ class EmergencyVolumePanel extends StatefulWidget {
 
 class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
   late _Volumes _local;
-  _Volumes? _queued;
+  _QueuedVolumes? _queued;
   _Volumes? _awaitingAck;
+  Future<void>? _drainFuture;
+  var _generation = 0;
   var _sending = false;
   var _dragging = false;
   var _restoreBusy = false;
@@ -70,37 +75,66 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
         key: emergencyVolumesKey,
         initiallyExpanded: widget.expanded,
         onExpansionChanged: (_) => widget.onToggle(),
-        title: const Text('Volumes de emergência'),
-        subtitle: const Text('Ajustes temporários desta sessão'),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        tilePadding: EdgeInsets.symmetric(horizontal: widget.compact ? 8 : 16),
+        title: const Text(
+          'Volumes de emergência',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: widget.compact
+            ? null
+            : const Text('Ajustes temporários desta sessão'),
+        childrenPadding: EdgeInsets.fromLTRB(
+          widget.compact ? 8 : 16,
+          0,
+          widget.compact ? 8 : 16,
+          widget.compact ? 4 : 16,
+        ),
         children: [
-          _VolumeSlider(
-            label: 'Master',
-            value: _local.master * 100,
-            onChangeStart: _beginDrag,
-            onChangeEnd: _endDrag,
-            onChanged: (value) => _changeVolumes(master: value / 100),
-          ),
-          _VolumeSlider(
-            label: 'Música',
-            value: _local.music * 100,
-            onChangeStart: _beginDrag,
-            onChangeEnd: _endDrag,
-            onChanged: (value) => _changeVolumes(music: value / 100),
-          ),
-          _VolumeSlider(
-            label: 'Narração',
-            value: _local.narration * 100,
-            onChangeStart: _beginDrag,
-            onChangeEnd: _endDrag,
-            onChanged: (value) => _changeVolumes(narration: value / 100),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _restoreBusy ? null : _restore,
-              icon: const Icon(Icons.restore),
-              label: const Text('Restaurar predefinições'),
+          SizedBox(
+            height: widget.compact ? 104 : 260,
+            child: SingleChildScrollView(
+              primary: false,
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  _VolumeSlider(
+                    label: 'Master',
+                    value: _local.master * 100,
+                    onChangeStart: _restoreBusy ? null : _beginDrag,
+                    onChangeEnd: _restoreBusy ? null : _endDrag,
+                    onChanged: _restoreBusy
+                        ? null
+                        : (value) => _changeVolumes(master: value / 100),
+                  ),
+                  _VolumeSlider(
+                    label: 'Música',
+                    value: _local.music * 100,
+                    onChangeStart: _restoreBusy ? null : _beginDrag,
+                    onChangeEnd: _restoreBusy ? null : _endDrag,
+                    onChanged: _restoreBusy
+                        ? null
+                        : (value) => _changeVolumes(music: value / 100),
+                  ),
+                  _VolumeSlider(
+                    label: 'Narração',
+                    value: _local.narration * 100,
+                    onChangeStart: _restoreBusy ? null : _beginDrag,
+                    onChangeEnd: _restoreBusy ? null : _endDrag,
+                    onChanged: _restoreBusy
+                        ? null
+                        : (value) => _changeVolumes(narration: value / 100),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _restoreBusy ? null : _restore,
+                      icon: const Icon(Icons.restore),
+                      label: const Text('Restaurar predefinições'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -109,18 +143,28 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
   }
 
   void _changeVolumes({double? master, double? music, double? narration}) {
+    if (_restoreBusy) return;
     setState(() {
       _local = (
         master: master ?? _local.master,
         music: music ?? _local.music,
         narration: narration ?? _local.narration,
       );
-      _queued = _local;
+      _queued = (volumes: _local, generation: _generation);
       _awaitingAck = _local;
     });
-    if (!_sending) {
-      _drainVolumeChanges();
-    }
+    _ensureDrain();
+  }
+
+  void _ensureDrain() {
+    if (_drainFuture != null) return;
+    late final Future<void> future;
+    future = _drainVolumeChanges().whenComplete(() {
+      if (identical(_drainFuture, future)) {
+        _drainFuture = null;
+      }
+    });
+    _drainFuture = future;
   }
 
   Future<void> _drainVolumeChanges() async {
@@ -128,8 +172,10 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
     _sending = true;
     try {
       while (_queued != null) {
-        final volumes = _queued!;
+        final queued = _queued!;
         _queued = null;
+        if (queued.generation != _generation) continue;
+        final volumes = queued.volumes;
         try {
           await widget.onVolumesChanged(
             masterVolume: volumes.master,
@@ -139,6 +185,9 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
         } catch (_) {
           _queued = null;
           _awaitingAck = null;
+          if (mounted) {
+            setState(() => _local = _snapshotVolumes(widget.playback));
+          }
           break;
         }
       }
@@ -149,14 +198,27 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
 
   Future<void> _restore() async {
     if (_restoreBusy) return;
-    setState(() => _restoreBusy = true);
+    setState(() {
+      _restoreBusy = true;
+      _generation++;
+      _queued = null;
+      _awaitingAck = null;
+      _dragging = false;
+    });
     try {
+      final activeDrain = _drainFuture;
+      if (activeDrain != null) {
+        await activeDrain;
+      }
       await widget.onRestore();
     } catch (_) {
       // The controller publishes the operator-facing alert.
     } finally {
       if (mounted) {
-        setState(() => _restoreBusy = false);
+        setState(() {
+          _local = _snapshotVolumes(widget.playback);
+          _restoreBusy = false;
+        });
       }
     }
   }
@@ -191,9 +253,9 @@ class _VolumeSlider extends StatelessWidget {
 
   final String label;
   final double value;
-  final ValueChanged<double> onChanged;
-  final ValueChanged<double> onChangeStart;
-  final ValueChanged<double> onChangeEnd;
+  final ValueChanged<double>? onChanged;
+  final ValueChanged<double>? onChangeStart;
+  final ValueChanged<double>? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {

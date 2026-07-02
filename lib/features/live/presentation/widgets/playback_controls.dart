@@ -11,6 +11,7 @@ class PlaybackControls extends StatefulWidget {
     required this.onResume,
     required this.onStop,
     required this.onNarrationChanged,
+    this.compact = false,
     super.key,
   });
 
@@ -20,6 +21,7 @@ class PlaybackControls extends StatefulWidget {
   final Future<void> Function() onResume;
   final Future<void> Function() onStop;
   final Future<void> Function(bool active) onNarrationChanged;
+  final bool compact;
 
   @override
   State<PlaybackControls> createState() => _PlaybackControlsState();
@@ -37,7 +39,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
     final paused = playback.phase == PlaybackPhase.paused;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(widget.compact ? 2 : 12),
         child: Wrap(
           alignment: WrapAlignment.spaceEvenly,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -48,6 +50,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
               key: pausePlaybackKey,
               icon: paused ? Icons.play_arrow : Icons.pause,
               label: paused ? 'Retomar' : 'Pausar',
+              compact: widget.compact,
               onPressed: hasCurrent && !_transportBusy
                   ? () =>
                         _runTransport(paused ? widget.onResume : widget.onPause)
@@ -57,6 +60,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
               key: stopPlaybackKey,
               icon: Icons.stop,
               label: 'Parar',
+              compact: widget.compact,
               onPressed: hasCurrent && !_stopBusy ? _runStop : null,
             ),
             Semantics(
@@ -73,6 +77,9 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                       : 'Narração inativa',
                 ),
                 selected: playback.narrationActive,
+                visualDensity: widget.compact
+                    ? VisualDensity.compact
+                    : VisualDensity.standard,
                 onSelected: widget.narrationAvailable && !_narrationBusy
                     ? _runNarration
                     : null,
@@ -132,12 +139,14 @@ class _Control extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    required this.compact,
     super.key,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +159,7 @@ class _Control extends StatelessWidget {
           tooltip: label,
           icon: Icon(icon),
         ),
-        Text(label),
+        if (!compact) Text(label),
       ],
     );
   }

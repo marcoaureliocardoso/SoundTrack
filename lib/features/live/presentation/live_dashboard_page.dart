@@ -120,90 +120,107 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
           ),
         ),
         body: SafeArea(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: momentCount + 5,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return _LiveStateSelector<PlaybackAlert?>(
-                  state: widget.controller.state,
-                  select: (state) => state.visibleAlert,
-                  builder: (context, alert) => alert == null
-                      ? const SizedBox.shrink()
-                      : LiveAlertBanner(
-                          alert: alert,
-                          onDismiss: widget.controller.dismissAlert,
-                        ),
-                );
-              }
-              if (index == 1) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: _LiveStateSelector<_NowPlayingSlice>(
-                    state: widget.controller.state,
-                    select: _selectNowPlaying,
-                    builder: (context, _) => NowPlayingPanel(
-                      key: nowPlayingPanelKey,
-                      state: widget.controller.state.value,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact =
+                  constraints.maxHeight < 650 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.4;
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  compact ? 4 : 12,
+                  16,
+                  compact ? 4 : 12,
+                ),
+                child: Column(
+                  children: [
+                    _LiveStateSelector<PlaybackAlert?>(
+                      state: widget.controller.state,
+                      select: (state) => state.visibleAlert,
+                      builder: (context, alert) => alert == null
+                          ? const SizedBox.shrink()
+                          : _BoundedPanel(
+                              maxHeight: compact ? 48 : 96,
+                              child: LiveAlertBanner(
+                                alert: alert,
+                                onDismiss: widget.controller.dismissAlert,
+                              ),
+                            ),
                     ),
-                  ),
-                );
-              }
-              if (index == 2) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'MOMENTOS — TOQUE PARA INICIAR',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                );
-              }
-              final momentIndex = index - 3;
-              if (momentIndex < momentCount) {
-                final moment = event.moments[momentIndex];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _LiveMomentItem(
-                    controller: widget.controller,
-                    number: momentIndex + 1,
-                    moment: moment,
-                    builder: widget.momentBuilder,
-                  ),
-                );
-              }
-              if (index == momentCount + 3) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4, bottom: 12),
-                  child: _LiveStateSelector<_ControlsSlice>(
-                    state: widget.controller.state,
-                    select: _selectControls,
-                    builder: (context, _) {
-                      final state = widget.controller.state.value;
-                      return PlaybackControls(
-                        playback: state.playback,
-                        narrationAvailable: state.narrationAvailable,
-                        onPause: widget.controller.pause,
-                        onResume: widget.controller.resume,
-                        onStop: _confirmStop,
-                        onNarrationChanged: widget.controller.setNarration,
-                      );
-                    },
-                  ),
-                );
-              }
-              return _LiveStateSelector<_VolumesSlice>(
-                state: widget.controller.state,
-                select: _selectVolumes,
-                builder: (context, _) {
-                  final state = widget.controller.state.value;
-                  return EmergencyVolumePanel(
-                    expanded: state.controlsExpanded,
-                    playback: state.playback,
-                    onToggle: widget.controller.toggleControlsExpanded,
-                    onVolumesChanged: widget.controller.setSessionVolumes,
-                    onRestore: widget.controller.restorePresetVolumes,
-                  );
-                },
+                    _BoundedPanel(
+                      maxHeight: compact ? 52 : 190,
+                      child: _LiveStateSelector<_NowPlayingSlice>(
+                        state: widget.controller.state,
+                        select: _selectNowPlaying,
+                        builder: (context, _) => NowPlayingPanel(
+                          key: nowPlayingPanelKey,
+                          state: widget.controller.state.value,
+                          compact: compact,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: compact ? 2 : 8),
+                    SizedBox(
+                      height: compact ? 24 : 32,
+                      width: double.infinity,
+                      child: Text(
+                        'MOMENTOS — TOQUE PARA INICIAR',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        itemCount: momentCount,
+                        itemBuilder: (context, momentIndex) {
+                          final moment = event.moments[momentIndex];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _LiveMomentItem(
+                              controller: widget.controller,
+                              number: momentIndex + 1,
+                              moment: moment,
+                              builder: widget.momentBuilder,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    _LiveStateSelector<_ControlsSlice>(
+                      state: widget.controller.state,
+                      select: _selectControls,
+                      builder: (context, _) {
+                        final state = widget.controller.state.value;
+                        return PlaybackControls(
+                          playback: state.playback,
+                          narrationAvailable: state.narrationAvailable,
+                          onPause: widget.controller.pause,
+                          onResume: widget.controller.resume,
+                          onStop: _confirmStop,
+                          onNarrationChanged: widget.controller.setNarration,
+                          compact: compact,
+                        );
+                      },
+                    ),
+                    _LiveStateSelector<_VolumesSlice>(
+                      state: widget.controller.state,
+                      select: _selectVolumes,
+                      builder: (context, _) {
+                        final state = widget.controller.state.value;
+                        return EmergencyVolumePanel(
+                          expanded: state.controlsExpanded,
+                          playback: state.playback,
+                          onToggle: widget.controller.toggleControlsExpanded,
+                          onVolumesChanged: widget.controller.setSessionVolumes,
+                          onRestore: widget.controller.restorePresetVolumes,
+                          compact: compact,
+                        );
+                      },
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -341,6 +358,27 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
     } catch (_) {
       // Disposal only detaches subscriptions; there is no operator action.
     }
+  }
+}
+
+class _BoundedPanel extends StatelessWidget {
+  const _BoundedPanel({required this.maxHeight, required this.child});
+
+  final double maxHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: ClipRect(
+        child: SingleChildScrollView(
+          primary: false,
+          physics: const ClampingScrollPhysics(),
+          child: child,
+        ),
+      ),
+    );
   }
 }
 
