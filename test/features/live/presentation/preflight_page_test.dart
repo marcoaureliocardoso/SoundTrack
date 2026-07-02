@@ -116,7 +116,7 @@ void main() {
       _app(
         event: event,
         service: service,
-        dashboardBuilder: (context, checkedEvent) {
+        dashboardBuilder: (context, checkedEvent, _) {
           dashboardBuilds++;
           enteredEvent = checkedEvent;
           return LiveDashboardPage(
@@ -154,6 +154,11 @@ void main() {
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
+    expect(find.text('Sair do Modo Evento?'), findsOneWidget);
+    expect(playback.alertController.hasListener, isTrue);
+    expect(playback.stopCalls, 0);
+    await tester.tap(find.text('Sair'));
+    await tester.pumpAndSettle();
     expect(playback.alertController.hasListener, isFalse);
     expect(playback.stopCalls, 0);
   });
@@ -171,6 +176,11 @@ void main() {
               severity: PreflightSeverity.warning,
               message: 'Volume baixo.',
             ),
+            PreflightItem(
+              code: PreflightCode.outputRoute,
+              severity: PreflightSeverity.info,
+              message: 'Saída de áudio: Alto-falante.',
+            ),
           ],
           readyMomentIds: const {'moment-1'},
         ),
@@ -181,8 +191,9 @@ void main() {
       _app(
         event: event,
         service: service,
-        dashboardBuilder: (_, checkedEvent) {
+        dashboardBuilder: (_, checkedEvent, outputRouteLabel) {
           expect(identical(checkedEvent, event), isTrue);
+          expect(outputRouteLabel, 'Alto-falante');
           return const Scaffold(body: Text('Ao vivo'));
         },
       ),
@@ -197,13 +208,11 @@ void main() {
 
   testWidgets('serializes entry until dashboard returns', (tester) async {
     var dashboardBuilds = 0;
-    final service = _ScriptedPreflightService([
-      Future.value(_cleanResult()),
-    ]);
+    final service = _ScriptedPreflightService([Future.value(_cleanResult())]);
     await tester.pumpWidget(
       _app(
         service: service,
-        dashboardBuilder: (_, _) {
+        dashboardBuilder: (_, _, _) {
           dashboardBuilds++;
           return const Scaffold(body: Text('Ao vivo único'));
         },
@@ -234,13 +243,11 @@ void main() {
     tester,
   ) async {
     var dashboardBuilds = 0;
-    final service = _ScriptedPreflightService([
-      Future.value(_errorResult()),
-    ]);
+    final service = _ScriptedPreflightService([Future.value(_errorResult())]);
     await tester.pumpWidget(
       _app(
         service: service,
-        dashboardBuilder: (_, _) {
+        dashboardBuilder: (_, _, _) {
           dashboardBuilds++;
           return const Scaffold(body: Text('Dashboard confirmado'));
         },
@@ -307,7 +314,8 @@ Widget _app({
       event: event ?? _event(),
       preflightService: service,
       dashboardBuilder:
-          dashboardBuilder ?? (_, _) => const Scaffold(body: Text('Dashboard')),
+          dashboardBuilder ??
+          (_, _, _) => const Scaffold(body: Text('Dashboard')),
     ),
   );
 }

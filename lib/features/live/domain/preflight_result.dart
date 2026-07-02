@@ -39,4 +39,16 @@ class PreflightResult {
 
   bool get hasWarnings =>
       items.any((item) => item.severity == PreflightSeverity.warning);
+
+  String get outputRouteLabel {
+    const prefix = 'Saída de áudio: ';
+    for (final item in items) {
+      if (item.code != PreflightCode.outputRoute) continue;
+      final message = item.message;
+      if (message.startsWith(prefix) && message.endsWith('.')) {
+        return message.substring(prefix.length, message.length - 1);
+      }
+    }
+    return 'Saída não confirmada';
+  }
 }

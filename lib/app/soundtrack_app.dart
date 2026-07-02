@@ -62,11 +62,13 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
         buildLiveEntryPage: (event) => PreflightPage(
           event: event,
           preflightService: widget.dependencies.createPreflightService(),
-          dashboardBuilder: (_, checkedEvent) => LiveDashboardPage(
-            controller: widget.dependencies.createLiveEventController(
-              checkedEvent,
-            ),
-          ),
+          dashboardBuilder: (_, checkedEvent, outputRouteLabel) =>
+              LiveDashboardPage(
+                controller: widget.dependencies.createLiveEventController(
+                  checkedEvent,
+                ),
+                outputRouteLabel: outputRouteLabel,
+              ),
         ),
         audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)
             ? debugAudioEngineLabRoute

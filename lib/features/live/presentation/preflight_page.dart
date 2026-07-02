@@ -5,7 +5,11 @@ import '../application/preflight_service.dart';
 import '../domain/preflight_result.dart';
 
 typedef LiveDashboardBuilder =
-    Widget Function(BuildContext context, SoundTrackEvent checkedEvent);
+    Widget Function(
+      BuildContext context,
+      SoundTrackEvent checkedEvent,
+      String outputRouteLabel,
+    );
 
 class PreflightPage extends StatefulWidget {
   const PreflightPage({
@@ -190,7 +194,11 @@ class _PreflightPageState extends State<PreflightPage> {
       }
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (context) => widget.dashboardBuilder(context, widget.event),
+          builder: (context) => widget.dashboardBuilder(
+            context,
+            widget.event,
+            result.outputRouteLabel,
+          ),
         ),
       );
     } finally {
