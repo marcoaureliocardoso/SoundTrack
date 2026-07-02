@@ -165,6 +165,19 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
       child: Column(
         children: [
           _buildAlert(compact: true),
+          _BoundedPanel(
+            maxHeight: 48,
+            child: _LiveStateSelector<_NowPlayingSlice>(
+              state: widget.controller.state,
+              select: _selectNowPlaying,
+              builder: (context, _) => NowPlayingPanel(
+                key: nowPlayingPanelKey,
+                state: widget.controller.state.value,
+                compact: true,
+              ),
+            ),
+          ),
+          _buildControls(compact: true),
           Expanded(
             child: SingleChildScrollView(
               primary: false,

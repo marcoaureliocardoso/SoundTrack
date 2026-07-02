@@ -7,6 +7,7 @@ import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/live/application/live_event_controller.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
+import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
 import '../../../support/fake_live_playback_port.dart';
 
@@ -96,6 +97,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final playback = FakeLivePlaybackPort();
+    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+      phase: PlaybackPhase.playing,
+      playing: true,
+      activeMomentId: 'moment-0',
+    );
     final controller = LiveEventController(
       event: _manyMomentsEvent(),
       playback: playback,
@@ -122,6 +128,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    expect(find.byKey(nowPlayingPanelKey), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(nowPlayingPanelKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(find.byKey(pausePlaybackKey), findsOneWidget);
+    expect(find.byKey(stopPlaybackKey), findsOneWidget);
+    expect(find.byKey(narrationKey), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(pausePlaybackKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byKey(stopPlaybackKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byKey(narrationKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: find.byKey(stopPlaybackKey),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.widget<InkWell>(find.byKey(narrationKey)).onTap, isNotNull);
+    await tester.tap(find.byKey(pausePlaybackKey));
+    await tester.pump();
+    expect(playback.pauseCalls, 1);
+
     expect(find.byType(Slider), findsNWidgets(3));
     await tester.ensureVisible(find.text('Restaurar predefinições'));
     await tester.pumpAndSettle();
@@ -142,6 +184,7 @@ SoundTrackEvent _manyMomentsEvent() {
         position: index,
         name: 'Momento com um nome suficientemente longo $index',
       ).copyWith(
+        narrationEnabled: index == 0,
         audio: AudioReference(
           uri: index == 1 ? null : 'content://track-$index',
           displayName: 'faixa-com-nome-longo-$index.mp3',
