@@ -32,11 +32,22 @@ dart format --output=none --set-exit-if-changed lib test integration_test
 flutter analyze
 flutter test
 flutter test integration_test\event_authoring_flow_test.dart -d emulator-5554
+flutter test integration_test\audio_engine_flow_test.dart -d emulator-5554
+flutter test integration_test\live_event_flow_test.dart -d emulator-5554
 ```
 
-O teste de integração precisa de um dispositivo Android ativo. O checklist e as
-evidências manuais da fundação ficam em
-[`docs/qa/foundation-checklist.md`](docs/qa/foundation-checklist.md).
+Os testes de integração precisam de um dispositivo Android ativo. Para a
+aceitação automatizada do MVP no emulador:
+
+```powershell
+.\tool\run_android_acceptance.ps1
+```
+
+O checklist de aceitação do MVP fica em
+[`docs/qa/mvp-acceptance-checklist.md`](docs/qa/mvp-acceptance-checklist.md).
+Os checklists anteriores ficam em
+[`docs/qa/foundation-checklist.md`](docs/qa/foundation-checklist.md) e
+[`docs/qa/audio-engine-checklist.md`](docs/qa/audio-engine-checklist.md).
 
 ## Continuidade de áudio
 
