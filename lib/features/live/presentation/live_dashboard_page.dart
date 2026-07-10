@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +7,7 @@ import '../../events/domain/event_moment.dart';
 import '../../events/domain/soundtrack_event.dart';
 import '../../playback/domain/playback_alert.dart';
 import '../../playback/domain/playback_snapshot.dart';
+import '../../../platform/system/system_status_gateway.dart';
 import '../application/live_event_controller.dart';
 import '../application/live_event_state.dart';
 export 'live_dashboard_keys.dart';
@@ -31,6 +34,7 @@ class LiveDashboardPage extends StatefulWidget {
     required this.controller,
     this.outputRouteLabel = 'Saída não confirmada',
     this.readOutputRoute,
+    this.systemStatus,
     this.momentBuilder,
     super.key,
   });
@@ -38,13 +42,15 @@ class LiveDashboardPage extends StatefulWidget {
   final LiveEventController controller;
   final String outputRouteLabel;
   final OutputRouteReader? readOutputRoute;
+  final SystemStatusGateway? systemStatus;
   final LiveMomentBuilder? momentBuilder;
 
   @override
   State<LiveDashboardPage> createState() => _LiveDashboardPageState();
 }
 
-class _LiveDashboardPageState extends State<LiveDashboardPage> {
+class _LiveDashboardPageState extends State<LiveDashboardPage>
+    with WidgetsBindingObserver {
   final _playbackControlsSelectorKey = GlobalKey();
   final _emergencyVolumesSelectorKey = GlobalKey();
   late final ValueNotifier<String> _outputRouteLabel;
@@ -59,17 +65,35 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _outputRouteLabel = ValueNotifier(widget.outputRouteLabel);
     _observedAlert = widget.controller.state.value.visibleAlert;
     widget.controller.state.addListener(_onLiveState);
+    unawaited(widget.controller.activateSession());
+    unawaited(widget.systemStatus?.setKeepScreenOn(true));
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.state.removeListener(_onLiveState);
+    unawaited(widget.systemStatus?.setKeepScreenOn(false));
     _outputRouteLabel.dispose();
     _disposeController();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.systemStatus?.setKeepScreenOn(true));
+      widget.controller.refreshFromPlaybackSnapshot();
+      _requestRouteRefresh();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      unawaited(widget.systemStatus?.setKeepScreenOn(false));
+    }
   }
 
   @override
@@ -403,7 +427,8 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Sair do Modo Evento?'),
           content: const Text(
-            'Sair desta tela não interrompe a reprodução em andamento.',
+            'A reprodução em andamento será interrompida e a sessão do '
+            'evento será encerrada.',
           ),
           actions: [
             TextButton(
@@ -426,6 +451,8 @@ class _LiveDashboardPageState extends State<LiveDashboardPage> {
         ),
       );
       if (confirmed == true && mounted) {
+        await widget.controller.confirmStop();
+        if (!mounted) return;
         setState(() => _allowPop = true);
         Navigator.of(context).pop();
       }

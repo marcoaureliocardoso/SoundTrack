@@ -160,7 +160,7 @@ void main() {
     await tester.tap(find.text('Sair'));
     await tester.pumpAndSettle();
     expect(playback.alertController.hasListener, isFalse);
-    expect(playback.stopCalls, 0);
+    expect(playback.stopCalls, 1);
   });
 
   testWidgets('clean result enters directly and warnings do not block', (

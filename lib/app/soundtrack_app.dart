@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 
 import '../features/events/application/event_library_controller.dart';
 import '../features/events/application/event_transfer_controller.dart';
+import '../features/events/domain/soundtrack_event.dart';
 import '../features/events/presentation/event_library_page.dart';
 import '../features/live/presentation/live_dashboard_page.dart';
 import '../features/live/presentation/preflight_page.dart';
+import '../features/playback/domain/playback_snapshot.dart';
 import '../features/playback/presentation/audio_engine_lab_page.dart';
 import 'app_dependencies.dart';
 
@@ -21,12 +23,14 @@ class SoundTrackApp extends StatefulWidget {
 class _SoundTrackAppState extends State<SoundTrackApp> {
   late final EventLibraryController _libraryController;
   late final EventTransferController _transferController;
+  late final Future<SoundTrackEvent?> _activeEvent;
 
   @override
   void initState() {
     super.initState();
     _libraryController = widget.dependencies.createLibraryController();
     _transferController = widget.dependencies.createTransferController();
+    _activeEvent = _loadActiveEvent();
   }
 
   @override
@@ -52,30 +56,83 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
         useMaterial3: true,
       ),
       routes: routes,
-      home: EventLibraryPage(
-        controller: _libraryController,
-        createEditorController: widget.dependencies.createEditorController,
-        onExport: _transferController.exportEvent,
-        onImport: _transferController.importEvent,
-        transferController: _transferController,
-        onSelectAudio: _transferController.selectAudio,
-        buildLiveEntryPage: (event) => PreflightPage(
-          event: event,
-          preflightService: widget.dependencies.createPreflightService(),
-          dashboardBuilder: (_, checkedEvent, outputRouteLabel) =>
-              LiveDashboardPage(
-                controller: widget.dependencies.createLiveEventController(
-                  checkedEvent,
-                ),
-                outputRouteLabel: outputRouteLabel,
-                readOutputRoute:
-                    widget.dependencies.systemStatus.outputRouteLabel,
-              ),
-        ),
-        audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)
-            ? debugAudioEngineLabRoute
-            : null,
+      home: FutureBuilder<SoundTrackEvent?>(
+        future: _activeEvent,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final activeEvent = snapshot.data;
+          if (activeEvent != null) {
+            return _buildLiveDashboard(activeEvent);
+          }
+          return _buildLibraryPage(routes);
+        },
       ),
+    );
+  }
+
+  Future<SoundTrackEvent?> _loadActiveEvent() async {
+    final store = widget.dependencies.activeLiveSessionStore;
+    if (store == null) {
+      return null;
+    }
+    final eventId = await store.readEventId();
+    if (eventId == null) {
+      return null;
+    }
+    final playback = widget.dependencies.playback.snapshot.value;
+    if (playback.phase == PlaybackPhase.idle) {
+      await store.clear();
+      return null;
+    }
+    final event = await widget.dependencies.eventRepository.findById(eventId);
+    if (event == null) {
+      await store.clear();
+      return null;
+    }
+    return event;
+  }
+
+  Widget _buildLibraryPage(Map<String, WidgetBuilder> routes) {
+    return EventLibraryPage(
+      controller: _libraryController,
+      createEditorController: widget.dependencies.createEditorController,
+      onExport: _transferController.exportEvent,
+      onImport: _transferController.importEvent,
+      transferController: _transferController,
+      onSelectAudio: _transferController.selectAudio,
+      buildLiveEntryPage: (event) => PreflightPage(
+        event: event,
+        preflightService: widget.dependencies.createPreflightService(),
+        dashboardBuilder: _buildDashboardFromPreflight,
+      ),
+      audioEngineLabRoute: routes.containsKey(debugAudioEngineLabRoute)
+          ? debugAudioEngineLabRoute
+          : null,
+    );
+  }
+
+  Widget _buildLiveDashboard(SoundTrackEvent event) {
+    return LiveDashboardPage(
+      controller: widget.dependencies.createLiveEventController(event),
+      readOutputRoute: widget.dependencies.systemStatus.outputRouteLabel,
+      systemStatus: widget.dependencies.systemStatus,
+    );
+  }
+
+  Widget _buildDashboardFromPreflight(
+    BuildContext context,
+    SoundTrackEvent checkedEvent,
+    String outputRouteLabel,
+  ) {
+    return LiveDashboardPage(
+      controller: widget.dependencies.createLiveEventController(checkedEvent),
+      outputRouteLabel: outputRouteLabel,
+      readOutputRoute: widget.dependencies.systemStatus.outputRouteLabel,
+      systemStatus: widget.dependencies.systemStatus,
     );
   }
 }

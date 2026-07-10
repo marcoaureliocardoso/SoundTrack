@@ -7,12 +7,14 @@ import '../../events/domain/soundtrack_event.dart';
 import '../../playback/application/live_playback_port.dart';
 import '../../playback/domain/playback_alert.dart';
 import '../../playback/domain/playback_snapshot.dart';
+import 'active_live_session_store.dart';
 import 'live_event_state.dart';
 
 class LiveEventController {
   LiveEventController({
     required SoundTrackEvent event,
     required LivePlaybackPort playback,
+    this.activeSessionStore,
   }) : _playback = playback,
        state = ValueNotifier<LiveEventState>(
          LiveEventState(
@@ -30,6 +32,7 @@ class LiveEventController {
   }
 
   final LivePlaybackPort _playback;
+  final ActiveLiveSessionStore? activeSessionStore;
   final ValueNotifier<LiveEventState> state;
 
   late final StreamSubscription<PlaybackAlert> _alertSubscription;
@@ -107,14 +110,19 @@ class LiveEventController {
   Future<void> resume() =>
       _runTransport(_playback.resume, 'Não foi possível retomar a reprodução.');
 
-  Future<void> stop({required bool confirmed}) {
+  Future<void> activateSession() async {
+    await activeSessionStore?.saveEventId(state.value.event.id);
+  }
+
+  Future<void> stop({required bool confirmed}) async {
     if (!confirmed) {
-      return Future<void>.value();
+      return;
     }
-    return _invokeAndReport(
+    await _invokeAndReport(
       _playback.stop,
       'Não foi possível parar a reprodução.',
     );
+    await activeSessionStore?.clear();
   }
 
   Future<void> confirmStop() => stop(confirmed: true);

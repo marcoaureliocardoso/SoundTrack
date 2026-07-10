@@ -438,7 +438,7 @@ void main() {
     await harness.dispose(tester);
   });
 
-  testWidgets('back requires confirmation and never stops playback', (
+  testWidgets('back requires confirmation and stops only after confirmation', (
     tester,
   ) async {
     final playback = FakeLivePlaybackPort();
@@ -486,7 +486,7 @@ void main() {
     await tester.tap(find.text('Sair'));
     await tester.pumpAndSettle();
     expect(find.byType(LiveDashboardPage), findsNothing);
-    expect(playback.stopCalls, 0);
+    expect(playback.stopCalls, 1);
     expect(playback.disposeCalls, 0);
     expect(playback.alertController.hasListener, isFalse);
   });

@@ -13,6 +13,7 @@ import '../features/events/data/json_file_event_repository.dart';
 import '../features/events/domain/soundtrack_event.dart';
 import '../features/live/application/preflight_record_repository.dart';
 import '../features/live/application/preflight_service.dart';
+import '../features/live/application/active_live_session_store.dart';
 import '../features/live/application/live_event_controller.dart';
 import '../features/playback/application/live_playback_port.dart';
 import '../platform/documents/document_gateway.dart';
@@ -29,6 +30,7 @@ class AppDependencies {
     this.documentGateway = const MethodChannelDocumentGateway(),
     this.exportCodec = const EventExportCodec(),
     this.preflightRecords,
+    this.activeLiveSessionStore,
     this.systemStatus = const MethodChannelSystemStatusGateway(),
     this.clock = DateTime.now,
   });
@@ -39,6 +41,7 @@ class AppDependencies {
   final DocumentGateway documentGateway;
   final EventExportCodec exportCodec;
   final PreflightRecordRepository? preflightRecords;
+  final ActiveLiveSessionStore? activeLiveSessionStore;
   final SystemStatusGateway systemStatus;
   final DateTime Function() clock;
   final LivePlaybackPort playback;
@@ -58,6 +61,7 @@ class AppDependencies {
       newMomentId: uuid.v4,
       playback: playback,
       preflightRecords: JsonFilePreflightRecordRepository(storageDirectory),
+      activeLiveSessionStore: FileActiveLiveSessionStore(storageDirectory),
     );
   }
 
@@ -108,6 +112,10 @@ class AppDependencies {
   }
 
   LiveEventController createLiveEventController(SoundTrackEvent event) {
-    return LiveEventController(event: event, playback: playback);
+    return LiveEventController(
+      event: event,
+      playback: playback,
+      activeSessionStore: activeLiveSessionStore,
+    );
   }
 }
