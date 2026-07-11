@@ -116,12 +116,13 @@ void main() {
       await tester.tap(find.text('Parar reprodução'));
       await _pumpFlow(tester);
       expect(playback.stopCalls, 1);
-      expect(await activeSessionStore.readEventId(), isNull);
+      expect(await activeSessionStore.readEventId(), event.id);
 
       await tester.binding.handlePopRoute();
       await _pumpFlow(tester);
       await tester.tap(find.text('Sair'));
       await _pumpFlow(tester);
+      expect(await activeSessionStore.readEventId(), isNull);
       await tester.binding.handlePopRoute();
       await _pumpFlow(tester);
       await tester.binding.handlePopRoute();
