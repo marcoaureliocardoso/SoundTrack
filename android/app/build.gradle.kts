@@ -1,3 +1,20 @@
+import java.util.Properties
+import org.gradle.api.GradleException
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+val releaseSigningKeys =
+    listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val releaseSigningConfigured =
+    keystorePropertiesFile.exists() &&
+        releaseSigningKeys.all { key ->
+            !keystoreProperties.getProperty(key).isNullOrBlank()
+        }
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -24,12 +41,40 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseSigningConfigured) {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
+    }
+}
+
+val validateReleaseSigning = tasks.register("validateReleaseSigning") {
+    doLast {
+        if (!releaseSigningConfigured) {
+            throw GradleException(
+                "Release signing is not configured. Create android/key.properties " +
+                    "with storeFile, storePassword, keyAlias and keyPassword.",
+            )
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name.contains("Release") && name != "validateReleaseSigning") {
+        dependsOn(validateReleaseSigning)
     }
 }
 
