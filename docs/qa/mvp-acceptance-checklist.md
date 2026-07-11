@@ -1,14 +1,18 @@
 # Checklist de aceitação do MVP SoundTrack
 
-Data: 10 de julho de 2026.
+Atualizado em 11 de julho de 2026.
 
-## Escopo desta rodada
+## Escopo das rodadas
 
-- Escopo autorizado pelo usuário: validação automatizada/local e emulador Android.
-- Aparelho físico Android: adiado nesta rodada para controlar custo de tokens e tempo.
+- Validação automatizada local executada em Windows.
+- Fluxos Android executados no emulador API 35.
+- Fluxos Android automatizados executados em um moto g54 5G com Android 15,
+  API 35 e conexão ADB por Wi-Fi.
+- Testes físicos manuais específicos permanecem adiados por decisão do
+  stakeholder.
 - Comando reprodutível: `.\tool\run_android_acceptance.ps1`.
-- Dispositivo padrão esperado pelo runner: `emulator-5554`.
-- Para outro emulador, definir `SOUNDTRACK_ANDROID_DEVICE` antes de executar.
+- Destino padrão do runner: `emulator-5554`.
+- Para outro destino, definir `SOUNDTRACK_ANDROID_DEVICE` antes de executar.
 
 ## Automação obrigatória
 
@@ -19,7 +23,7 @@ Data: 10 de julho de 2026.
 - [x] `flutter test integration_test/live_event_flow_test.dart -d emulator-5554`
 - [x] `git diff --check`
 
-## Critérios cobertos pelo novo fluxo live automatizado
+## Critérios cobertos pelo fluxo live automatizado
 
 - [x] Evento com três momentos.
 - [x] Momento com loop.
@@ -33,34 +37,49 @@ Data: 10 de julho de 2026.
 - [x] Volumes de sessão podem ser ajustados e restaurados.
 - [x] Tentativa de momento pendente preserva o momento atual.
 - [x] Alternância background/resume não chama pause nem stop.
-- [x] Stop com confirmação encerra sessão ativa.
+- [x] Parar reprodução preserva a sessão do Modo Evento.
+- [x] Sair do Modo Evento interrompe o áudio e encerra a sessão.
 - [x] Exportação gera JSON.
 - [x] Importação marca áudios como pendentes.
 - [x] Religamento de áudio pendente exige escolha explícita no novo dispositivo.
 
-## Verificação de qualidade de release
+## Evidência automatizada no aparelho físico
+
+No moto g54 5G, Android 15/API 35:
+
+- [x] Criação, exportação, importação e religamento pela interface composta.
+- [x] Motor real reproduz, faz crossfade, preserva a faixa após falha, alterna
+  Narração e para.
+- [x] Motor real suporta 50 crossfades e toques rápidos automatizados.
+- [x] Modo Evento alterna para background, retoma, para, sai, exporta e importa.
+- [x] APK debug normal instala, inicia em “Meus Eventos” e não registra crash.
+
+## Verificação de qualidade do MVP
 
 - [x] Formatação verificada em `lib`, `test` e `integration_test`.
-- [x] Suíte completa executada com geração de cobertura: 340 testes aprovados.
+- [x] Baseline funcional executada com cobertura: 344 testes aprovados.
 - [x] APK debug compilado em `build/app/outputs/flutter-apk/app-debug.apk`.
+- [x] Testes Kotlin Android aprovados.
+- [x] Build release bloqueado sem keystore privado, sem fallback para chave
+  debug.
 
-## Aceitação física adiada
+## Aceitação física manual adiada
 
-Os itens abaixo continuam necessários antes de release em campo, mas não foram
-executados nesta rodada:
+Os itens abaixo não bloqueiam a preparação do RC nesta rodada, mas continuam
+pendentes antes de uma decisão de uso em campo:
 
-- [ ] ADIADO — evento com pelo menos 20 momentos em aparelho físico.
+- [ ] ADIADO — evento manual com pelo menos 20 momentos.
 - [ ] ADIADO — saída por cabo.
 - [ ] ADIADO — saída Bluetooth.
-- [ ] ADIADO — alternância para WhatsApp enquanto toca.
+- [ ] ADIADO — alternância manual para WhatsApp enquanto toca.
 - [ ] ADIADO — chamada recebida.
-- [ ] ADIADO — desconexão/reconexão de rota.
+- [ ] ADIADO — desconexão/reconexão manual de rota.
 - [ ] ADIADO — sessão contínua de duas horas.
-- [ ] ADIADO — 100 mudanças de momento.
-- [ ] ADIADO — taps rápidos repetidos no Dashboard em aparelho físico.
+- [ ] ADIADO — 100 mudanças manuais de momento.
+- [ ] ADIADO — taps rápidos repetidos manualmente no Dashboard.
 - [ ] ADIADO — auditoria audível do volume de Narração.
 - [ ] ADIADO — importação em segundo aparelho e religamento manual.
 - [ ] ADIADO — observações de bateria e memória em sessão longa.
 
-Qualquer item físico com falha deve bloquear release e registrar reprodução,
-ambiente, evidência e decisão de correção.
+Uma falha futura deve registrar reprodução, ambiente, evidência e decisão de
+correção. Itens adiados não podem ser descritos como aprovados.
