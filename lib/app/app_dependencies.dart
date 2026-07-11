@@ -1,0 +1,121 @@
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
+
+import '../features/events/application/event_editor_controller.dart';
+import '../features/events/application/event_audio_availability_service.dart';
+import '../features/events/application/event_library_controller.dart';
+import '../features/events/application/event_transfer_controller.dart';
+import '../features/events/data/event_export_codec.dart';
+import '../features/events/data/event_repository.dart';
+import '../features/events/data/json_file_event_repository.dart';
+import '../features/events/domain/soundtrack_event.dart';
+import '../features/live/application/preflight_record_repository.dart';
+import '../features/live/application/preflight_service.dart';
+import '../features/live/application/active_live_session_store.dart';
+import '../features/live/application/live_event_controller.dart';
+import '../features/playback/application/live_playback_port.dart';
+import '../platform/documents/document_gateway.dart';
+import '../platform/documents/method_channel_document_gateway.dart';
+import '../platform/system/method_channel_system_status_gateway.dart';
+import '../platform/system/system_status_gateway.dart';
+
+class AppDependencies {
+  const AppDependencies({
+    required this.eventRepository,
+    required this.newEventId,
+    required this.newMomentId,
+    required this.playback,
+    this.documentGateway = const MethodChannelDocumentGateway(),
+    this.exportCodec = const EventExportCodec(),
+    this.preflightRecords,
+    this.activeLiveSessionStore,
+    this.systemStatus = const MethodChannelSystemStatusGateway(),
+    this.clock = DateTime.now,
+  });
+
+  final EventRepository eventRepository;
+  final String Function() newEventId;
+  final String Function() newMomentId;
+  final DocumentGateway documentGateway;
+  final EventExportCodec exportCodec;
+  final PreflightRecordRepository? preflightRecords;
+  final ActiveLiveSessionStore? activeLiveSessionStore;
+  final SystemStatusGateway systemStatus;
+  final DateTime Function() clock;
+  final LivePlaybackPort playback;
+
+  static Future<AppDependencies> create({
+    required LivePlaybackPort playback,
+  }) async {
+    final documents = await getApplicationDocumentsDirectory();
+    final storageDirectory = Directory(
+      '${documents.path}${Platform.pathSeparator}soundtrack',
+    );
+    final repository = JsonFileEventRepository(storageDirectory);
+    const uuid = Uuid();
+    return AppDependencies(
+      eventRepository: repository,
+      newEventId: uuid.v4,
+      newMomentId: uuid.v4,
+      playback: playback,
+      preflightRecords: JsonFilePreflightRecordRepository(storageDirectory),
+      activeLiveSessionStore: FileActiveLiveSessionStore(storageDirectory),
+    );
+  }
+
+  EventLibraryController createLibraryController() {
+    final audioAvailability = EventAudioAvailabilityService(
+      canRead: documentGateway.canRead,
+      probeAudio: documentGateway.probeAudio,
+    );
+    return EventLibraryController(
+      repository: eventRepository,
+      newId: newEventId,
+      revalidateAudio: audioAvailability.revalidate,
+      preflightRecords: preflightRecords,
+    );
+  }
+
+  EventEditorController createEditorController(SoundTrackEvent event) {
+    return EventEditorController(
+      repository: eventRepository,
+      initial: event,
+      newId: newMomentId,
+    );
+  }
+
+  EventTransferController createTransferController() {
+    return EventTransferController(
+      gateway: documentGateway,
+      codec: exportCodec,
+      repository: eventRepository,
+      newId: newEventId,
+      clock: clock,
+    );
+  }
+
+  PreflightService createPreflightService() {
+    final records = preflightRecords;
+    if (records == null) {
+      throw StateError('PreflightRecordRepository is required for live mode.');
+    }
+    return PreflightService(
+      canRead: documentGateway.canRead,
+      canPrepare: (uri) async =>
+          (await documentGateway.probeAudio(uri)).playable,
+      systemStatus: systemStatus,
+      records: records,
+      clock: clock,
+    );
+  }
+
+  LiveEventController createLiveEventController(SoundTrackEvent event) {
+    return LiveEventController(
+      event: event,
+      playback: playback,
+      activeSessionStore: activeLiveSessionStore,
+    );
+  }
+}

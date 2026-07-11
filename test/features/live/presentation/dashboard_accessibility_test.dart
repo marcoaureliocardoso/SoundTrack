@@ -1,0 +1,203 @@
+import 'dart:ui' show Tristate;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/events/domain/audio_reference.dart';
+import 'package:soundtrack/features/events/domain/event_moment.dart';
+import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
+import 'package:soundtrack/features/live/application/live_event_controller.dart';
+import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
+import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
+
+import '../../../support/fake_live_playback_port.dart';
+
+void main() {
+  testWidgets('remains scrollable without overflow at large text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _manyMomentsEvent(),
+      playback: playback,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Rota não confirmada',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Scrollable), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.byKey(liveMomentKey('moment-0')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    final size = tester.getSize(find.byKey(liveMomentKey('moment-0')));
+    expect(size.height, greaterThanOrEqualTo(64));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'pending and current moment semantics include state and enabled',
+    (tester) async {
+      final playback = FakeLivePlaybackPort();
+      final event = _manyMomentsEvent();
+      playback.snapshotNotifier.value = playback.snapshotNotifier.value
+          .copyWith(activeMomentId: 'moment-0', playing: true);
+      final controller = LiveEventController(event: event, playback: playback);
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LiveDashboardPage(
+            controller: controller,
+            outputRouteLabel: 'Alto-falante',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final current = tester
+          .getSemantics(find.byKey(liveMomentKey('moment-0')))
+          .getSemanticsData();
+      expect(current.label, contains('ATUAL'));
+      expect(current.flagsCollection.isEnabled, Tristate.isFalse);
+
+      final pending = tester
+          .getSemantics(find.byKey(liveMomentKey('moment-1')))
+          .getSemanticsData();
+      expect(pending.label, contains('ÁUDIO PENDENTE'));
+      expect(pending.flagsCollection.isEnabled, Tristate.isFalse);
+    },
+  );
+
+  testWidgets('expanded emergency volumes fit a short landscape viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(480, 280);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final playback = FakeLivePlaybackPort();
+    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+      phase: PlaybackPhase.playing,
+      playing: true,
+      activeMomentId: 'moment-0',
+    );
+    final controller = LiveEventController(
+      event: _manyMomentsEvent(),
+      playback: playback,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Bluetooth',
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(nowPlayingPanelKey), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(nowPlayingPanelKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(find.byKey(pausePlaybackKey), findsOneWidget);
+    expect(find.byKey(stopPlaybackKey), findsOneWidget);
+    expect(find.byKey(narrationKey), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração inativa',
+    );
+    expect(
+      tester.getSize(find.byKey(pausePlaybackKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byKey(stopPlaybackKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byKey(narrationKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: find.byKey(stopPlaybackKey),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.widget<InkWell>(find.byKey(narrationKey)).onTap, isNotNull);
+    await tester.tap(find.byKey(pausePlaybackKey));
+    await tester.pump();
+    expect(playback.pauseCalls, 1);
+
+    expect(find.byType(Slider), findsNWidgets(3));
+    await tester.ensureVisible(find.text('Restaurar predefinições'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restaurar predefinições'), findsOneWidget);
+    await tester.tap(find.text('Restaurar predefinições'));
+    await tester.pump();
+    expect(playback.restoreCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+SoundTrackEvent _manyMomentsEvent() {
+  var event = SoundTrackEvent.create(id: 'event', name: 'Evento muito longo');
+  for (var index = 0; index < 8; index++) {
+    event = event.addMoment(
+      EventMoment.create(
+        id: 'moment-$index',
+        position: index,
+        name: 'Momento com um nome suficientemente longo $index',
+      ).copyWith(
+        narrationEnabled: index == 0,
+        audio: AudioReference(
+          uri: index == 1 ? null : 'content://track-$index',
+          displayName: 'faixa-com-nome-longo-$index.mp3',
+          pending: index == 1,
+          artist: null,
+          duration: const Duration(minutes: 4),
+        ),
+      ),
+    );
+  }
+  return event;
+}
