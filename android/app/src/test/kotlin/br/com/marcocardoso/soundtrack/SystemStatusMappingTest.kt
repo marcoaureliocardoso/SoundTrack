@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import android.app.NotificationManager
 import android.media.AudioDeviceInfo

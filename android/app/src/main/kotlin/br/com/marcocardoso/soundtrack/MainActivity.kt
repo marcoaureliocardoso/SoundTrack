@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine

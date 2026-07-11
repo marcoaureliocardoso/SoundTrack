@@ -6,7 +6,7 @@ class MethodChannelSystemStatusGateway implements SystemStatusGateway {
   const MethodChannelSystemStatusGateway();
 
   static const MethodChannel _channel = MethodChannel(
-    'com.soundtrack/system_status',
+    'br.com.marcocardoso.soundtrack/system_status',
   );
 
   @override

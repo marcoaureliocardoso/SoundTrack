@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

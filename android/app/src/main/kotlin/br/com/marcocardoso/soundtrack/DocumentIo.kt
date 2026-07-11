@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

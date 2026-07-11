@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import android.app.NotificationManager
 import android.content.Context
@@ -216,6 +216,6 @@ class SystemStatusChannel(
     }
 
     private companion object {
-        const val CHANNEL_NAME = "com.soundtrack/system_status"
+        const val CHANNEL_NAME = "br.com.marcocardoso.soundtrack/system_status"
     }
 }

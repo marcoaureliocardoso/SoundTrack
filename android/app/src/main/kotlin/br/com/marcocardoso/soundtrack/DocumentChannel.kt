@@ -1,4 +1,4 @@
-package com.soundtrack.soundtrack
+package br.com.marcocardoso.soundtrack
 
 import android.content.ContentResolver
 import android.content.Intent
@@ -340,7 +340,7 @@ class DocumentChannel(
     }
 
     companion object {
-        private const val CHANNEL_NAME = "com.soundtrack/documents"
+        private const val CHANNEL_NAME = "br.com.marcocardoso.soundtrack/documents"
         private const val JSON_MIME = "application/json"
         private val JSON_TYPES =
             arrayOf(

@@ -5,6 +5,13 @@ import 'package:soundtrack/main.dart' as app;
 import '../support/fake_live_playback_port.dart';
 
 void main() {
+  test('uses the final Android notification channel', () {
+    expect(
+      app.soundTrackAudioServiceConfig.androidNotificationChannelId,
+      'br.com.marcocardoso.soundtrack.playback',
+    );
+  });
+
   testWidgets(
     'dependency startup failure disposes audio and shows a safe error',
     (tester) async {

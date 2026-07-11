@@ -6,7 +6,9 @@ import 'package:soundtrack/platform/documents/method_channel_document_gateway.da
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('com.soundtrack/documents');
+  const channel = MethodChannel(
+    'br.com.marcocardoso.soundtrack/documents',
+  );
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late MethodChannelDocumentGateway gateway;

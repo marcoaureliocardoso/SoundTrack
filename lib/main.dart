@@ -7,7 +7,7 @@ import 'package:soundtrack/features/playback/infrastructure/audio_engine_factory
 import 'package:soundtrack/features/playback/infrastructure/soundtrack_audio_handler.dart';
 
 const soundTrackAudioServiceConfig = AudioServiceConfig(
-  androidNotificationChannelId: 'com.soundtrack.playback',
+  androidNotificationChannelId: 'br.com.marcocardoso.soundtrack.playback',
   androidNotificationChannelName: 'Evento em execução',
   androidNotificationClickStartsActivity: true,
   // 0.18.19 rejects ongoing=true with foreground retention on pause.

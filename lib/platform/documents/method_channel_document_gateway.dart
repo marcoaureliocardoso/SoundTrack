@@ -6,7 +6,7 @@ class MethodChannelDocumentGateway implements DocumentGateway {
   const MethodChannelDocumentGateway();
 
   static const MethodChannel _channel = MethodChannel(
-    'com.soundtrack/documents',
+    'br.com.marcocardoso.soundtrack/documents',
   );
   static const Set<String> _cancellationCodes = {'cancelled', 'canceled'};
 
