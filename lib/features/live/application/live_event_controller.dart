@@ -122,10 +122,14 @@ class LiveEventController {
       _playback.stop,
       'Não foi possível parar a reprodução.',
     );
-    await activeSessionStore?.clear();
   }
 
   Future<void> confirmStop() => stop(confirmed: true);
+
+  Future<void> confirmExit() async {
+    await stop(confirmed: true);
+    await activeSessionStore?.clear();
+  }
 
   Future<void> setNarration(bool active) {
     if (_disposed) {
