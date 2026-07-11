@@ -32,6 +32,7 @@ typedef LiveMomentBuilder =
 class LiveDashboardPage extends StatefulWidget {
   const LiveDashboardPage({
     required this.controller,
+    this.onSessionExit,
     this.outputRouteLabel = 'Saída não confirmada',
     this.readOutputRoute,
     this.systemStatus,
@@ -40,6 +41,7 @@ class LiveDashboardPage extends StatefulWidget {
   });
 
   final LiveEventController controller;
+  final Future<void> Function()? onSessionExit;
   final String outputRouteLabel;
   final OutputRouteReader? readOutputRoute;
   final SystemStatusGateway? systemStatus;
@@ -451,8 +453,13 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         ),
       );
       if (confirmed == true && mounted) {
-        await widget.controller.confirmStop();
+        await widget.controller.confirmExit();
         if (!mounted) return;
+        final onSessionExit = widget.onSessionExit;
+        if (onSessionExit != null) {
+          await onSessionExit();
+          return;
+        }
         setState(() => _allowPop = true);
         Navigator.of(context).pop();
       }

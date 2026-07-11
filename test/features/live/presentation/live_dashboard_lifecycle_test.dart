@@ -50,7 +50,9 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('confirmed stop clears the active live session', (tester) async {
+  testWidgets('confirmed stop preserves the active live session', (
+    tester,
+  ) async {
     final playback = FakeLivePlaybackPort();
     playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
       phase: PlaybackPhase.playing,
@@ -81,7 +83,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(playback.stopCalls, 1);
-    expect(await store.readEventId(), isNull);
+    expect(await store.readEventId(), 'event-1');
   });
 
   testWidgets(
@@ -119,11 +121,81 @@ void main() {
     },
   );
 
+  testWidgets('restored dashboard exit returns to the event library', (
+    tester,
+  ) async {
+    final event = _event();
+    final playback = FakeLivePlaybackPort();
+    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+      phase: PlaybackPhase.playing,
+      playing: true,
+      activeMomentId: 'moment-1',
+    );
+    final store = MemoryActiveLiveSessionStore();
+    await store.saveEventId(event.id);
+
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository([event]),
+          newEventId: () => 'unused',
+          newMomentId: () => 'unused',
+          playback: playback,
+          activeLiveSessionStore: store,
+          systemStatus: _SystemStatus(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(LiveDashboardPage), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sair'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(EventLibraryPage), findsOneWidget);
+    expect(find.byType(LiveDashboardPage), findsNothing);
+    expect(await store.readEventId(), isNull);
+  });
+
   testWidgets('clears stale active session when playback is idle', (
     tester,
   ) async {
     final event = _event();
     final playback = FakeLivePlaybackPort();
+    final store = MemoryActiveLiveSessionStore();
+    await store.saveEventId(event.id);
+
+    await tester.pumpWidget(
+      SoundTrackApp(
+        dependencies: AppDependencies(
+          eventRepository: InMemoryEventRepository([event]),
+          newEventId: () => 'unused',
+          newMomentId: () => 'unused',
+          playback: playback,
+          activeLiveSessionStore: store,
+          systemStatus: _SystemStatus(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(EventLibraryPage), findsOneWidget);
+    expect(find.byType(LiveDashboardPage), findsNothing);
+    expect(await store.readEventId(), isNull);
+  });
+
+  testWidgets('clears stale active session when playback is stopped', (
+    tester,
+  ) async {
+    final event = _event();
+    final playback = FakeLivePlaybackPort();
+    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
+      phase: PlaybackPhase.stopped,
+    );
     final store = MemoryActiveLiveSessionStore();
     await store.saveEventId(event.id);
 

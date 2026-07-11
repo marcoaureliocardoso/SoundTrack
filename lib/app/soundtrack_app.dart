@@ -23,7 +23,7 @@ class SoundTrackApp extends StatefulWidget {
 class _SoundTrackAppState extends State<SoundTrackApp> {
   late final EventLibraryController _libraryController;
   late final EventTransferController _transferController;
-  late final Future<SoundTrackEvent?> _activeEvent;
+  late Future<SoundTrackEvent?> _activeEvent;
 
   @override
   void initState() {
@@ -84,7 +84,11 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
       return null;
     }
     final playback = widget.dependencies.playback.snapshot.value;
-    if (playback.phase == PlaybackPhase.idle) {
+    final inactive =
+        playback.phase == PlaybackPhase.idle ||
+        playback.phase == PlaybackPhase.stopped ||
+        playback.activeMomentId == null;
+    if (inactive) {
       await store.clear();
       return null;
     }
@@ -118,9 +122,17 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
   Widget _buildLiveDashboard(SoundTrackEvent event) {
     return LiveDashboardPage(
       controller: widget.dependencies.createLiveEventController(event),
+      onSessionExit: _leaveRestoredSession,
       readOutputRoute: widget.dependencies.systemStatus.outputRouteLabel,
       systemStatus: widget.dependencies.systemStatus,
     );
+  }
+
+  Future<void> _leaveRestoredSession() async {
+    if (!mounted) return;
+    setState(() {
+      _activeEvent = Future<SoundTrackEvent?>.value();
+    });
   }
 
   Widget _buildDashboardFromPreflight(
