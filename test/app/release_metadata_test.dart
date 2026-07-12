@@ -17,10 +17,7 @@ void main() {
         'description: "Trilha sonora contínua e controlada para eventos."',
       ),
     );
-    expect(
-      gradle,
-      contains('namespace = "br.com.marcocardoso.soundtrack"'),
-    );
+    expect(gradle, contains('namespace = "br.com.marcocardoso.soundtrack"'));
     expect(
       gradle,
       contains('applicationId = "br.com.marcocardoso.soundtrack"'),

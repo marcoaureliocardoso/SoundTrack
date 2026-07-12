@@ -6,9 +6,7 @@ import 'package:soundtrack/platform/system/system_status_gateway.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel(
-    'br.com.marcocardoso.soundtrack/system_status',
-  );
+  const channel = MethodChannel('br.com.marcocardoso.soundtrack/system_status');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late MethodChannelSystemStatusGateway gateway;

@@ -58,6 +58,8 @@ No moto g54 5G, Android 15/API 35:
 
 - [x] Formatação verificada em `lib`, `test` e `integration_test`.
 - [x] Baseline funcional executada com cobertura: 344 testes aprovados.
+- [x] Gate do RC executado com cobertura: 347 testes aprovados, incluindo
+  metadados, canal de notificação e proteção de assinatura.
 - [x] APK debug compilado em `build/app/outputs/flutter-apk/app-debug.apk`.
 - [x] Testes Kotlin Android aprovados.
 - [x] Build release bloqueado sem keystore privado, sem fallback para chave
