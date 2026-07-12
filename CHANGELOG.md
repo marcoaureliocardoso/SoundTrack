@@ -4,6 +4,27 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-12
+
+### Changed
+
+- Promovido o release candidate aprovado para a primeira versão estável, sem
+  mudanças funcionais.
+- Versão Android atualizada para `1.0.0+2`, preservando o crescimento do
+  `versionCode` após a distribuição do RC.
+
+### Validation
+
+- APK assinado do RC validado no emulador e em moto g54 5G com Android 15.
+- Instalação, inicialização, retorno após alternância de aplicativo e ausência
+  de crashes confirmados no aparelho físico.
+
+### Known limitations
+
+- Normalização automática de volume permanece fora do MVP.
+- Testes manuais de Bluetooth, cabo, ligação, WhatsApp e sessão prolongada
+  continuam adiados.
+
 ## [1.0.0-rc.1] - 2026-07-11
 
 ### Added

@@ -1,6 +1,6 @@
 # Checklist de aceitação do MVP SoundTrack
 
-Atualizado em 11 de julho de 2026.
+Atualizado em 12 de julho de 2026.
 
 ## Escopo das rodadas
 
@@ -53,6 +53,8 @@ No moto g54 5G, Android 15/API 35:
 - [x] Motor real suporta 50 crossfades e toques rápidos automatizados.
 - [x] Modo Evento alterna para background, retoma, para, sai, exporta e importa.
 - [x] APK debug normal instala, inicia em “Meus Eventos” e não registra crash.
+- [x] APK assinado publicado do RC teve o SHA-256 conferido, foi instalado,
+  iniciou em “Meus Eventos”, alternou para outro app e retornou sem crash.
 
 ## Verificação de qualidade do MVP
 

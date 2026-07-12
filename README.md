@@ -7,9 +7,10 @@ para permitir uma fala sobre a trilha.
 
 ## Estado da versão
 
-A versão atual é `1.0.0-rc.1+1`, o primeiro candidato à versão estável. O RC
-ainda não possui APK oficial: a publicação depende da configuração do keystore
-privado, geração do artefato assinado e validação desse mesmo artefato.
+A versão atual é `1.0.0+2`, a primeira versão estável. Ela promove o RC
+`1.0.0-rc.1+1` já aprovado, sem mudanças funcionais, e incrementa o
+`versionCode` Android porque o candidato anterior foi distribuído. O APK
+oficial assinado e seu checksum são publicados na GitHub Release `v1.0.0`.
 
 ## Funcionalidades
 
@@ -25,7 +26,7 @@ privado, geração do artefato assinado e validação desse mesmo artefato.
 - Exportação e importação de eventos em JSON versionado.
 - Religamento manual de músicas indisponíveis após importação.
 
-## Limitações do release candidate
+## Limitações conhecidas
 
 - O JSON exportado contém a configuração do evento, mas não os bytes das
   músicas.
@@ -33,7 +34,7 @@ privado, geração do artefato assinado e validação desse mesmo artefato.
   momento é manual.
 - Os testes manuais de Bluetooth, cabo, ligação recebida, alternância real para
   WhatsApp e sessão prolongada estão adiados.
-- Somente Android está no escopo deste candidato.
+- Somente Android está no escopo desta versão.
 
 ## Requisitos
 
