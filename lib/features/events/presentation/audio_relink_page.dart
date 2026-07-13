@@ -65,27 +65,38 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
 
   Widget _pendingTile(EventMoment moment) {
     final audio = moment.audio;
-    final hasDetails = audio?.artist != null || audio?.duration != null;
     return Card(
-      child: ListTile(
-        title: Text(audio?.displayName ?? 'Nenhuma música selecionada'),
-        subtitle: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              audio?.displayName ?? 'Nenhuma música selecionada',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
             Text(moment.name),
             if (audio?.artist != null) Text(audio!.artist!),
             if (audio?.duration != null) Text(_duration(audio!.duration!)),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: _busyMomentId == null
+                    ? () => _relink(moment.id)
+                    : null,
+                child: _busyMomentId == moment.id
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Escolher música'),
+              ),
+            ),
           ],
-        ),
-        isThreeLine: hasDetails,
-        trailing: FilledButton(
-          onPressed: _busyMomentId == null ? () => _relink(moment.id) : null,
-          child: _busyMomentId == moment.id
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Escolher música'),
         ),
       ),
     );

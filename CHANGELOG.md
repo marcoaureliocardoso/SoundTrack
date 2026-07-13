@@ -4,6 +4,15 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+### Fixed
+
+- Layouts de Dashboard, editores e religamento agora respeitam fontes Android
+  ampliadas até 200% sem sobreposição ou overflow.
+- “Tocando agora” e “Momentos” usam fluxo vertical com separação mínima de
+  16 px e rolagem única no Modo Evento.
+- Nomes extensos de arquivos de áudio são abreviados visualmente nos botões e
+  cartões de momentos, preservando o nome completo para leitores de tela.
+
 ## [1.0.0] - 2026-07-12
 
 ### Changed

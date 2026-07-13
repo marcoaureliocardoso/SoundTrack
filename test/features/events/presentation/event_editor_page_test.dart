@@ -9,8 +9,32 @@ import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 
 import '../../../support/in_memory_event_repository.dart';
+import '../../../support/accessibility_test_harness.dart';
 
 void main() {
+  testWidgets('remains usable at 200 percent on a small portrait screen', (
+    tester,
+  ) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: _validEvent(),
+      newId: () => 'unused',
+    );
+
+    await pumpAccessibleApp(
+      tester,
+      viewport: accessibilityViewports.first,
+      textScale: 2,
+      home: EventEditorPage(controller: controller),
+    );
+
+    expect(tester.takeException(), isNull);
+    await tester.drag(find.byType(ReorderableListView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(find.byKey(momentTileKey('moment-1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('adds and reorders moments', (tester) async {
     var nextId = 0;
     final controller = EventEditorController(
@@ -200,7 +224,8 @@ void main() {
       MaterialApp(home: EventEditorPage(controller: controller)),
     );
 
-    expect(find.text('Áudio pendente: Entrada.mp3 • Loop'), findsOneWidget);
+    expect(find.text('Áudio pendente: Entrada.mp3'), findsOneWidget);
+    expect(find.text('Loop'), findsOneWidget);
     expect(find.text('Entrada.mp3 • Loop'), findsNothing);
   });
 

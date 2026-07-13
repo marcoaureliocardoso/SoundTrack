@@ -15,8 +15,62 @@ import 'package:soundtrack/features/live/application/preflight_record_repository
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
 import '../../../support/in_memory_event_repository.dart';
+import '../../../support/accessibility_test_harness.dart';
 
 void main() {
+  testWidgets('keeps library actions usable at 200 percent', (tester) async {
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository([
+        SoundTrackEvent.create(
+          id: 'event-1',
+          name: 'Evento com um nome muito longo para a biblioteca',
+        ),
+      ]),
+      newId: () => 'event-2',
+    );
+
+    await pumpAccessibleApp(
+      tester,
+      viewport: accessibilityViewports.first,
+      textScale: 2,
+      home: EventLibraryPage(
+        controller: controller,
+        createEditorController: (_) => throw UnimplementedError(),
+        onImport: () async => null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(addEventKey), findsOneWidget);
+    expect(find.text('Importar'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps empty message away from edges at 200 percent', (
+    tester,
+  ) async {
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository(),
+      newId: () => 'event-1',
+    );
+    await pumpAccessibleApp(
+      tester,
+      viewport: accessibilityViewports.first,
+      textScale: 2,
+      home: EventLibraryPage(
+        controller: controller,
+        createEditorController: (_) => throw UnimplementedError(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final message = tester.getRect(
+      find.text('Nenhum evento. Crie o primeiro para começar.'),
+    );
+    expect(message.left, greaterThanOrEqualTo(16));
+    expect(message.right, lessThanOrEqualTo(304));
+  });
+
   testWidgets('creates an event from the library', (tester) async {
     final controller = EventLibraryController(
       repository: InMemoryEventRepository(),

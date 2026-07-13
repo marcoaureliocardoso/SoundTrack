@@ -26,11 +26,19 @@ class MomentTile extends StatelessWidget {
       child: ListTile(
         onTap: onEdit,
         leading: const Icon(Icons.drag_handle),
-        title: Text(moment.name),
-        subtitle: Text(
-          '$audioLabel • ${moment.endBehavior == EndBehavior.loop ? 'Loop' : 'Parar'}'
-          '${moment.narrationEnabled ? ' • Narração' : ''}',
+        title: Text(moment.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(audioLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              '${moment.endBehavior == EndBehavior.loop ? 'Loop' : 'Parar'}'
+              '${moment.narrationEnabled ? ' • Narração' : ''}',
+            ),
+          ],
         ),
+        isThreeLine: true,
         trailing: IconButton(
           tooltip: 'Excluir ${moment.name}',
           onPressed: onDelete,

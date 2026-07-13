@@ -62,6 +62,16 @@ No moto g54 5G, Android 15/API 35:
 - [x] Baseline funcional executada com cobertura: 344 testes aprovados.
 - [x] Gate do RC executado com cobertura: 347 testes aprovados, incluindo
   metadados, canal de notificação e proteção de assinatura.
+- [x] Gate de acessibilidade executado: 357 testes aprovados, incluindo fontes
+  de 100%, 150% e 200% em viewports pequenos de retrato e paisagem.
+- [x] Dashboard usa rolagem vertical e preserva pelo menos 16 px entre
+  “Tocando agora” e “Momentos”, sem sobreposição.
+- [x] Biblioteca, editores, religamento, pré-evento, controles e volumes foram
+  exercitados com fonte a 200% sem overflow.
+- [x] APK debug normal inspecionado no emulador Android 15/API 35 com fonte a
+  200% em retrato e paisagem; árvore de UI carregada e buffer de crashes vazio.
+- [x] Escala de fonte e orientação originais do emulador foram restauradas
+  depois da inspeção.
 - [x] APK debug compilado em `build/app/outputs/flutter-apk/app-debug.apk`.
 - [x] Testes Kotlin Android aprovados.
 - [x] Build release bloqueado sem keystore privado, sem fallback para chave

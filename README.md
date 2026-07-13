@@ -25,6 +25,8 @@ oficial assinado e seu checksum são publicados na GitHub Release `v1.0.0`.
 - Persistência e restauração segura da sessão ativa.
 - Exportação e importação de eventos em JSON versionado.
 - Religamento manual de músicas indisponíveis após importação.
+- Layout responsivo a fontes Android ampliadas até 200%, com rolagem e sem
+  sobreposição entre “Tocando agora”, momentos e controles.
 
 ## Limitações conhecidas
 
