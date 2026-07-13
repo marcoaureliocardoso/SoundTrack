@@ -15,84 +15,88 @@ import '../../../support/fake_live_playback_port.dart';
 import '../../../support/accessibility_test_harness.dart';
 
 void main() {
-  testWidgets('keeps transport and expanded volumes usable at 200 percent', (
-    tester,
-  ) async {
-    final playback = FakeLivePlaybackPort();
-    playback.snapshotNotifier.value = const PlaybackSnapshot.idle().copyWith(
-      phase: PlaybackPhase.playing,
-      playing: true,
-      activeMomentId: 'moment-0',
-    );
-    final controller = LiveEventController(
-      event: _manyMomentsEvent(),
-      playback: playback,
-    );
-    addTearDown(controller.dispose);
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'keeps transport and expanded volumes usable at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final playback = FakeLivePlaybackPort();
+        playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
+            .copyWith(
+              phase: PlaybackPhase.playing,
+              playing: true,
+              activeMomentId: 'moment-0',
+            );
+        final controller = LiveEventController(
+          event: _manyMomentsEvent(),
+          playback: playback,
+        );
+        addTearDown(controller.dispose);
 
-    await pumpAccessibleApp(
-      tester,
-      viewport: accessibilityViewports.first,
-      textScale: 2,
-      home: LiveDashboardPage(
-        controller: controller,
-        outputRouteLabel: 'Bluetooth com nome de rota muito longo',
-      ),
-    );
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: LiveDashboardPage(
+            controller: controller,
+            outputRouteLabel: 'Bluetooth com nome de rota muito longo',
+          ),
+        );
 
-    final dashboardScroll = find.descendant(
-      of: find.byKey(liveDashboardScrollKey),
-      matching: find.byType(Scrollable),
-    );
-    await tester.scrollUntilVisible(
-      find.byKey(pausePlaybackKey),
-      320,
-      scrollable: dashboardScroll,
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.getSize(find.byKey(pausePlaybackKey)).height,
-      greaterThanOrEqualTo(48),
-    );
-    expect(
-      tester.getSize(find.byKey(stopPlaybackKey)).height,
-      greaterThanOrEqualTo(48),
-    );
-    expect(
-      tester.getSize(find.byKey(narrationKey)).height,
-      greaterThanOrEqualTo(48),
-    );
+        final dashboardScroll = find.descendant(
+          of: find.byKey(liveDashboardScrollKey),
+          matching: find.byType(Scrollable),
+        );
+        await tester.scrollUntilVisible(
+          find.byKey(pausePlaybackKey),
+          320,
+          scrollable: dashboardScroll,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.getSize(find.byKey(pausePlaybackKey)).height,
+          greaterThanOrEqualTo(48),
+        );
+        expect(
+          tester.getSize(find.byKey(stopPlaybackKey)).height,
+          greaterThanOrEqualTo(48),
+        );
+        expect(
+          tester.getSize(find.byKey(narrationKey)).height,
+          greaterThanOrEqualTo(48),
+        );
 
-    await tester.scrollUntilVisible(
-      find.byKey(emergencyVolumesKey),
-      320,
-      scrollable: dashboardScroll,
+        await tester.scrollUntilVisible(
+          find.byKey(emergencyVolumesKey),
+          320,
+          scrollable: dashboardScroll,
+        );
+        await tester.tap(find.byKey(emergencyVolumesKey));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.getSize(find.byKey(nowPlayingPanelKey)).height,
+          greaterThan(48),
+        );
+        expect(
+          intersects(
+            tester,
+            find.byKey(nowPlayingPanelKey),
+            find.byKey(pausePlaybackKey),
+          ),
+          isFalse,
+        );
+        expect(find.byType(SingleChildScrollView), findsOneWidget);
+        expect(find.byType(Slider), findsNWidgets(3));
+        await tester.drag(
+          find.byType(SingleChildScrollView).last,
+          const Offset(0, -800),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Restaurar predefinições'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
-    await tester.tap(find.byKey(emergencyVolumesKey));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(
-      tester.getSize(find.byKey(nowPlayingPanelKey)).height,
-      greaterThan(48),
-    );
-    expect(
-      intersects(
-        tester,
-        find.byKey(nowPlayingPanelKey),
-        find.byKey(pausePlaybackKey),
-      ),
-      isFalse,
-    );
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(find.byType(Slider), findsNWidgets(3));
-    await tester.drag(
-      find.byType(SingleChildScrollView).last,
-      const Offset(0, -800),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Restaurar predefinições'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   testWidgets('keeps now playing separated from moments at 200 percent', (
     tester,

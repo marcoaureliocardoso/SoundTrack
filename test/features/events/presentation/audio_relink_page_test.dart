@@ -13,45 +13,48 @@ import '../../../support/in_memory_event_repository.dart';
 import '../../../support/accessibility_test_harness.dart';
 
 void main() {
-  testWidgets('reflows relink action at 200 percent without overlap', (
-    tester,
-  ) async {
-    final base = _event();
-    final longEvent = base.copyWith(
-      moments: [
-        base.moments.single.copyWith(
-          audio: const AudioReference(
-            uri: 'old',
-            displayName:
-                'arquivo-de-musica-com-um-nome-extremamente-longo-para-evento.mp3',
-            pending: true,
-            artist: 'Old artist',
-            duration: Duration(seconds: 10),
-          ),
-        ),
-      ],
-    );
-    final controller = EventTransferController(
-      gateway: _Gateway(),
-      codec: const EventExportCodec(),
-      repository: InMemoryEventRepository([longEvent]),
-      newId: () => 'new',
-      clock: DateTime.now,
-    );
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'reflows relink action without overlap at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final base = _event();
+        final longEvent = base.copyWith(
+          moments: [
+            base.moments.single.copyWith(
+              audio: const AudioReference(
+                uri: 'old',
+                displayName:
+                    'arquivo-de-musica-com-um-nome-extremamente-longo-para-evento.mp3',
+                pending: true,
+                artist: 'Old artist',
+                duration: Duration(seconds: 10),
+              ),
+            ),
+          ],
+        );
+        final controller = EventTransferController(
+          gateway: _Gateway(),
+          codec: const EventExportCodec(),
+          repository: InMemoryEventRepository([longEvent]),
+          newId: () => 'new',
+          clock: DateTime.now,
+        );
 
-    await pumpAccessibleApp(
-      tester,
-      viewport: accessibilityViewports.first,
-      textScale: 2,
-      home: AudioRelinkPage(event: longEvent, controller: controller),
-    );
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: AudioRelinkPage(event: longEvent, controller: controller),
+        );
 
-    expect(tester.takeException(), isNull);
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
-    await tester.pumpAndSettle();
-    expect(find.text('Escolher música'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+        expect(tester.takeException(), isNull);
+        await tester.drag(find.byType(ListView), const Offset(0, -400));
+        await tester.pumpAndSettle();
+        expect(find.text('Escolher música'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('lists pending audio and resolves it', (tester) async {
     final event = _event();

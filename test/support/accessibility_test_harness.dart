@@ -4,6 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 const accessibilityTextScales = <double>[1, 1.5, 2];
 const accessibilityViewports = <Size>[Size(320, 480), Size(480, 320)];
 
+typedef AccessibilityTestCase = ({Size viewport, double textScale});
+
+final accessibilityTestCases = <AccessibilityTestCase>[
+  for (final viewport in accessibilityViewports)
+    for (final textScale in accessibilityTextScales)
+      (viewport: viewport, textScale: textScale),
+];
+
+String accessibilityTestCaseLabel(AccessibilityTestCase testCase) {
+  final orientation = testCase.viewport.width < testCase.viewport.height
+      ? 'portrait'
+      : 'landscape';
+  return '${(testCase.textScale * 100).round()}% $orientation';
+}
+
 Future<void> pumpAccessibleApp(
   WidgetTester tester, {
   required Widget home,

@@ -12,28 +12,33 @@ import '../../../support/in_memory_event_repository.dart';
 import '../../../support/accessibility_test_harness.dart';
 
 void main() {
-  testWidgets('remains usable at 200 percent on a small portrait screen', (
-    tester,
-  ) async {
-    final controller = EventEditorController(
-      repository: InMemoryEventRepository(),
-      initial: _validEvent(),
-      newId: () => 'unused',
-    );
-
-    await pumpAccessibleApp(
+  for (final testCase in accessibilityTestCases) {
+    testWidgets('remains usable at ${accessibilityTestCaseLabel(testCase)}', (
       tester,
-      viewport: accessibilityViewports.first,
-      textScale: 2,
-      home: EventEditorPage(controller: controller),
-    );
+    ) async {
+      final controller = EventEditorController(
+        repository: InMemoryEventRepository(),
+        initial: _validEvent(),
+        newId: () => 'unused',
+      );
 
-    expect(tester.takeException(), isNull);
-    await tester.drag(find.byType(ReorderableListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
-    expect(find.byKey(momentTileKey('moment-1')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      await pumpAccessibleApp(
+        tester,
+        viewport: testCase.viewport,
+        textScale: testCase.textScale,
+        home: EventEditorPage(controller: controller),
+      );
+
+      expect(tester.takeException(), isNull);
+      await tester.drag(
+        find.byType(ReorderableListView),
+        const Offset(0, -600),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(momentTileKey('moment-1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('adds and reorders moments', (tester) async {
     var nextId = 0;

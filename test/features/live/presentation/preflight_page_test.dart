@@ -17,29 +17,35 @@ import '../../../support/fake_live_playback_port.dart';
 import '../../../support/accessibility_test_harness.dart';
 
 void main() {
-  testWidgets('keeps preflight content reachable at 200 percent', (
-    tester,
-  ) async {
-    final service = _ScriptedPreflightService([Future.value(_errorResult())]);
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'keeps preflight content reachable at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final service = _ScriptedPreflightService([
+          Future.value(_errorResult()),
+        ]);
 
-    await pumpAccessibleApp(
-      tester,
-      viewport: accessibilityViewports.first,
-      textScale: 2,
-      home: PreflightPage(
-        event: _event(),
-        preflightService: service,
-        dashboardBuilder: (_, _, _) => const Scaffold(body: Text('Dashboard')),
-      ),
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: PreflightPage(
+            event: _event(),
+            preflightService: service,
+            dashboardBuilder: (_, _, _) =>
+                const Scaffold(body: Text('Dashboard')),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        await tester.drag(find.byType(ListView), const Offset(0, -500));
+        await tester.pumpAndSettle();
+        expect(find.text('Entrar mesmo assim'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
-    await tester.pumpAndSettle();
-    expect(find.text('Entrar mesmo assim'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   testWidgets('shows progress then groups errors warnings and information', (
     tester,

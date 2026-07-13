@@ -18,33 +18,38 @@ import '../../../support/in_memory_event_repository.dart';
 import '../../../support/accessibility_test_harness.dart';
 
 void main() {
-  testWidgets('keeps library actions usable at 200 percent', (tester) async {
-    final controller = EventLibraryController(
-      repository: InMemoryEventRepository([
-        SoundTrackEvent.create(
-          id: 'event-1',
-          name: 'Evento com um nome muito longo para a biblioteca',
-        ),
-      ]),
-      newId: () => 'event-2',
-    );
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'keeps library actions usable at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final controller = EventLibraryController(
+          repository: InMemoryEventRepository([
+            SoundTrackEvent.create(
+              id: 'event-1',
+              name: 'Evento com um nome muito longo para a biblioteca',
+            ),
+          ]),
+          newId: () => 'event-2',
+        );
 
-    await pumpAccessibleApp(
-      tester,
-      viewport: accessibilityViewports.first,
-      textScale: 2,
-      home: EventLibraryPage(
-        controller: controller,
-        createEditorController: (_) => throw UnimplementedError(),
-        onImport: () async => null,
-      ),
-    );
-    await tester.pumpAndSettle();
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: EventLibraryPage(
+            controller: controller,
+            createEditorController: (_) => throw UnimplementedError(),
+            onImport: () async => null,
+          ),
+        );
+        await tester.pumpAndSettle();
 
-    expect(find.byKey(addEventKey), findsOneWidget);
-    expect(find.text('Importar'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+        expect(find.byKey(addEventKey), findsOneWidget);
+        expect(find.text('Importar'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('keeps empty message away from edges at 200 percent', (
     tester,
