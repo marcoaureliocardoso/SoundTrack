@@ -188,30 +188,23 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
   }
 
   Widget _buildExpandedVolumes({required bool compact}) {
-    return Padding(
+    return SingleChildScrollView(
+      primary: false,
       padding: const EdgeInsets.all(4),
       child: Column(
         children: [
-          _buildAlert(compact: true),
-          _BoundedPanel(
-            maxHeight: 48,
-            child: _LiveStateSelector<_NowPlayingSlice>(
-              state: widget.controller.state,
-              select: _selectNowPlaying,
-              builder: (context, _) => NowPlayingPanel(
-                key: nowPlayingPanelKey,
-                state: widget.controller.state.value,
-                compact: true,
-              ),
+          _buildAlert(),
+          _LiveStateSelector<_NowPlayingSlice>(
+            state: widget.controller.state,
+            select: _selectNowPlaying,
+            builder: (context, _) => NowPlayingPanel(
+              key: nowPlayingPanelKey,
+              state: widget.controller.state.value,
+              compact: true,
             ),
           ),
           _buildControls(compact: true),
-          Expanded(
-            child: SingleChildScrollView(
-              primary: false,
-              child: _buildVolumes(expanded: true, compact: compact),
-            ),
-          ),
+          _buildVolumes(expanded: true, compact: compact),
         ],
       ),
     );
@@ -236,7 +229,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
           ),
           sliver: SliverMainAxisGroup(
             slivers: [
-              SliverToBoxAdapter(child: _buildAlert(compact: compact)),
+              SliverToBoxAdapter(child: _buildAlert()),
               SliverToBoxAdapter(
                 child: _LiveStateSelector<_NowPlayingSlice>(
                   state: widget.controller.state,
@@ -285,18 +278,15 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
     );
   }
 
-  Widget _buildAlert({required bool compact}) {
+  Widget _buildAlert() {
     return _LiveStateSelector<PlaybackAlert?>(
       state: widget.controller.state,
       select: (state) => state.visibleAlert,
       builder: (context, alert) => alert == null
           ? const SizedBox.shrink()
-          : _BoundedPanel(
-              maxHeight: compact ? 48 : 96,
-              child: LiveAlertBanner(
-                alert: alert,
-                onDismiss: widget.controller.dismissAlert,
-              ),
+          : LiveAlertBanner(
+              alert: alert,
+              onDismiss: widget.controller.dismissAlert,
             ),
     );
   }
@@ -477,27 +467,6 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
     } catch (_) {
       // Disposal only detaches subscriptions; there is no operator action.
     }
-  }
-}
-
-class _BoundedPanel extends StatelessWidget {
-  const _BoundedPanel({required this.maxHeight, required this.child});
-
-  final double maxHeight;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeight),
-      child: ClipRect(
-        child: SingleChildScrollView(
-          primary: false,
-          physics: const ClampingScrollPhysics(),
-          child: child,
-        ),
-      ),
-    );
   }
 }
 

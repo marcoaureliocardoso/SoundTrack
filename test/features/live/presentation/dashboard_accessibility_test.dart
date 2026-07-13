@@ -7,6 +7,8 @@ import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/live/application/live_event_controller.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
+import 'package:soundtrack/features/live/presentation/widgets/live_alert_banner.dart';
+import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
 import '../../../support/fake_live_playback_port.dart';
@@ -69,6 +71,19 @@ void main() {
     await tester.tap(find.byKey(emergencyVolumesKey));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byKey(nowPlayingPanelKey)).height,
+      greaterThan(48),
+    );
+    expect(
+      intersects(
+        tester,
+        find.byKey(nowPlayingPanelKey),
+        find.byKey(pausePlaybackKey),
+      ),
+      isFalse,
+    );
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(find.byType(Slider), findsNWidgets(3));
     await tester.drag(
       find.byType(SingleChildScrollView).last,
@@ -108,6 +123,47 @@ void main() {
         find.text('MOMENTOS — TOQUE PARA INICIAR'),
       ),
       isFalse,
+    );
+  });
+
+  testWidgets('lays out a large alert without clipping adjacent content', (
+    tester,
+  ) async {
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _manyMomentsEvent(),
+      playback: playback,
+    );
+    addTearDown(controller.dispose);
+
+    await pumpAccessibleApp(
+      tester,
+      viewport: accessibilityViewports.first,
+      textScale: 2,
+      home: LiveDashboardPage(
+        controller: controller,
+        outputRouteLabel: 'Rota não confirmada',
+      ),
+    );
+    playback.alertController.add(
+      const PlaybackAlert(
+        PlaybackAlertCode.routeChanged,
+        'A saída de áudio foi alterada durante o evento. Confirme a rota antes de continuar.',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LiveAlertBanner), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.byType(LiveAlertBanner),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.getRect(find.byTooltip('Dispensar aviso')).bottom,
+      lessThanOrEqualTo(tester.getRect(find.byType(LiveAlertBanner)).bottom),
     );
   });
 
@@ -279,6 +335,8 @@ void main() {
       isNotNull,
     );
     expect(tester.widget<InkWell>(find.byKey(narrationKey)).onTap, isNotNull);
+    await tester.ensureVisible(find.byKey(pausePlaybackKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(pausePlaybackKey));
     await tester.pump();
     expect(playback.pauseCalls, 1);

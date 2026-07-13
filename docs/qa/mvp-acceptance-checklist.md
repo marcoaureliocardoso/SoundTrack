@@ -62,7 +62,7 @@ No moto g54 5G, Android 15/API 35:
 - [x] Baseline funcional executada com cobertura: 344 testes aprovados.
 - [x] Gate do RC executado com cobertura: 347 testes aprovados, incluindo
   metadados, canal de notificação e proteção de assinatura.
-- [x] Gate de acessibilidade executado: 357 testes aprovados, incluindo fontes
+- [x] Gate de acessibilidade executado: 358 testes aprovados, incluindo fontes
   de 100%, 150% e 200% em viewports pequenos de retrato e paisagem.
 - [x] Dashboard usa rolagem vertical e preserva pelo menos 16 px entre
   “Tocando agora” e “Momentos”, sem sobreposição.
