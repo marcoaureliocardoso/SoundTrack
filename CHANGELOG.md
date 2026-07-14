@@ -4,10 +4,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-14
+
 ### Changed
 
-- Metadados da próxima correção preparados como `1.0.1+3`; `v1.0.0` permanece
-  a última versão publicada.
+- Versão Android atualizada para `1.0.1+3`, preservando o crescimento do
+  `versionCode` após os artefatos já distribuídos.
 
 ### Fixed
 
@@ -17,6 +19,12 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   16 px e rolagem única no Modo Evento.
 - Nomes extensos de arquivos de áudio são abreviados visualmente nos botões e
   cartões de momentos, preservando o nome completo para leitores de tela.
+
+### Validation
+
+- 388 testes Flutter e análise estática aprovados.
+- APK assinado instalado e iniciado no emulador Android 15/API 35; versão
+  `1.0.1 (3)`, tela “Meus Eventos” e buffer de crashes vazio confirmados.
 
 ## [1.0.0] - 2026-07-12
 

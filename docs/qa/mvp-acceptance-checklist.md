@@ -65,6 +65,8 @@ No moto g54 5G, Android 15/API 35:
 - [x] Gate de acessibilidade executado: 388 testes aprovados, incluindo a
   matriz de fontes de 100%, 150% e 200% em viewports pequenos de retrato e
   paisagem nas seis telas críticas.
+- [x] Gate da versão `1.0.1+3` repetido: 388 testes e análise estática
+  aprovados.
 - [x] Dashboard usa rolagem vertical e preserva pelo menos 16 px entre
   “Tocando agora” e “Momentos”, sem sobreposição.
 - [x] Biblioteca, editores, religamento, pré-evento, controles e volumes foram
@@ -77,10 +79,13 @@ No moto g54 5G, Android 15/API 35:
 - [x] Testes Kotlin Android aprovados.
 - [x] Build release bloqueado sem keystore privado, sem fallback para chave
   debug.
+- [x] APK release `1.0.1+3` assinado com o certificado oficial, instalado e
+  iniciado no emulador Android 15/API 35; tela “Meus Eventos” e buffer de
+  crashes vazio confirmados.
 
 ## Aceitação física manual adiada
 
-Os itens abaixo não bloqueiam a preparação do RC nesta rodada, mas continuam
+Os itens abaixo não bloqueiam a publicação da correção `1.0.1`, mas continuam
 pendentes antes de uma decisão de uso em campo:
 
 - [ ] ADIADO — evento manual com pelo menos 20 momentos.

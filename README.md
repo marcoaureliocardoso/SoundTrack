@@ -7,12 +7,9 @@ para permitir uma fala sobre a trilha.
 
 ## Estado da versão
 
-A versão de desenvolvimento é `1.0.1+3` e reúne as correções de acessibilidade
-descritas em `[Unreleased]` no changelog. Ela ainda não possui tag nem artefato
-oficial publicado.
-
-A última versão publicada continua sendo `1.0.0+2`, disponível com APK assinado
-e checksum na [GitHub Release `v1.0.0`](https://github.com/marcoaureliocardoso/SoundTrack/releases/tag/v1.0.0).
+A versão atual publicada é `1.0.1+3`, uma correção de acessibilidade da primeira
+versão estável. O APK assinado e seu checksum estão disponíveis na
+[GitHub Release `v1.0.1`](https://github.com/marcoaureliocardoso/SoundTrack/releases/tag/v1.0.1).
 
 ## Funcionalidades
 
