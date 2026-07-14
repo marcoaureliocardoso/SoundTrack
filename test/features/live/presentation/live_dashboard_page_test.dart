@@ -143,7 +143,10 @@ void main() {
 
     final releaseNarration = Completer<void>();
     harness.playback.onSetNarration = (_) => releaseNarration.future;
-    expect(find.text('Narração inativa'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração inativa',
+    );
     await tester.tap(find.byKey(narrationKey));
     await tester.tap(find.byKey(narrationKey));
     await tester.pump();
@@ -157,7 +160,10 @@ void main() {
         .value
         .copyWith(narrationActive: true);
     await tester.pump();
-    expect(find.text('Narração ativa'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração ativa',
+    );
 
     await _scrollToEmergencyVolumes(tester);
     await tester.tap(find.byKey(emergencyVolumesKey));

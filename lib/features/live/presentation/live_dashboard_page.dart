@@ -301,10 +301,12 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         return PlaybackControls(
           playback: state.playback,
           narrationAvailable: state.narrationAvailable,
+          volumesExpanded: state.controlsExpanded,
           onPause: widget.controller.pause,
           onResume: widget.controller.resume,
           onStop: _confirmStop,
           onNarrationChanged: widget.controller.setNarration,
+          onVolumesToggle: widget.controller.toggleControlsExpanded,
           compact: compact,
         );
       },
