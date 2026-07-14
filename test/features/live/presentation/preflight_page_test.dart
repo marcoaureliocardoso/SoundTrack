@@ -14,8 +14,39 @@ import 'package:soundtrack/features/live/presentation/preflight_page.dart';
 import 'package:soundtrack/platform/system/system_status_gateway.dart';
 
 import '../../../support/fake_live_playback_port.dart';
+import '../../../support/accessibility_test_harness.dart';
 
 void main() {
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'keeps preflight content reachable at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final service = _ScriptedPreflightService([
+          Future.value(_errorResult()),
+        ]);
+
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: PreflightPage(
+            event: _event(),
+            preflightService: service,
+            dashboardBuilder: (_, _, _) =>
+                const Scaffold(body: Text('Dashboard')),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        await tester.drag(find.byType(ListView), const Offset(0, -500));
+        await tester.pumpAndSettle();
+        expect(find.text('Entrar mesmo assim'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('shows progress then groups errors warnings and information', (
     tester,
   ) async {

@@ -194,11 +194,13 @@ class _FadeControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: Text(label)),
-        DropdownButton<int?>(
-          value: value?.inMilliseconds,
+        Text(label),
+        DropdownButtonFormField<int?>(
+          initialValue: value?.inMilliseconds,
+          isExpanded: true,
           onChanged: (milliseconds) => onChanged(
             milliseconds == null ? null : Duration(milliseconds: milliseconds),
           ),

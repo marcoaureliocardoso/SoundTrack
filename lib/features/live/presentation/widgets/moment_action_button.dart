@@ -59,8 +59,8 @@ class MomentActionButton extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 36,
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 36),
                 child: Text(
                   '$number',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -74,8 +74,10 @@ class MomentActionButton extends StatelessWidget {
                     Text(
                       moment.name,
                       style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Text(track, overflow: TextOverflow.ellipsis),
+                    Text(track, maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
                     Text(
                       statusText,

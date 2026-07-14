@@ -159,8 +159,7 @@ void main() {
     await tester.pump();
     expect(find.text('Narração ativa'), findsOneWidget);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
+    await _scrollToEmergencyVolumes(tester);
     await tester.tap(find.byKey(emergencyVolumesKey));
     await tester.pumpAndSettle();
     expect(find.byType(Slider), findsNWidgets(3));
@@ -267,8 +266,7 @@ void main() {
     harness.playback.onSetSessionVolumes = (_, _, _) =>
         Future<void>.error(StateError('volume rejected'));
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pumpAndSettle();
+    await _scrollToEmergencyVolumes(tester);
     await tester.tap(find.byKey(emergencyVolumesKey));
     await tester.pumpAndSettle();
     tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
@@ -291,8 +289,7 @@ void main() {
     final releaseFirst = Completer<void>();
     harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pumpAndSettle();
+    await _scrollToEmergencyVolumes(tester);
     await tester.tap(find.byKey(emergencyVolumesKey));
     await tester.pumpAndSettle();
     tester.widgetList<Slider>(find.byType(Slider)).first.onChanged!(20);
@@ -367,8 +364,7 @@ void main() {
       final releaseFirst = Completer<void>();
       harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
 
-      await tester.drag(find.byType(ListView), const Offset(0, -700));
-      await tester.pumpAndSettle();
+      await _scrollToEmergencyVolumes(tester);
       await tester.tap(find.byKey(emergencyVolumesKey));
       await tester.pumpAndSettle();
       final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
@@ -414,8 +410,7 @@ void main() {
     harness.playback.onRestorePresetVolumes = () =>
         Future<void>.error(StateError('restore rejected'));
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pumpAndSettle();
+    await _scrollToEmergencyVolumes(tester);
     await tester.tap(find.byKey(emergencyVolumesKey));
     await tester.pumpAndSettle();
     tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
@@ -696,8 +691,7 @@ void main() {
         ),
       ),
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
-    await tester.pumpAndSettle();
+    await _scrollToEmergencyVolumes(tester);
     final panelBefore = tester.widget(find.byType(EmergencyVolumePanel));
     final buildsBefore = momentBuilds;
 
@@ -745,6 +739,13 @@ void main() {
 
     expect(momentBuilds, greaterThan(0));
     expect(momentBuilds, lessThan(20));
+    await tester.scrollUntilVisible(
+      find.byKey(pausePlaybackKey),
+      600,
+      scrollable: _dashboardScrollable(),
+      maxScrolls: 100,
+    );
+    await tester.pumpAndSettle();
     expect(find.byKey(pausePlaybackKey), findsOneWidget);
     expect(find.byKey(emergencyVolumesKey), findsOneWidget);
     expect(tester.getTopLeft(find.byKey(pausePlaybackKey)).dy, lessThan(600));
@@ -754,6 +755,21 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox());
   });
+}
+
+Finder _dashboardScrollable() => find.descendant(
+  of: find.byKey(liveDashboardScrollKey),
+  matching: find.byType(Scrollable),
+);
+
+Future<void> _scrollToEmergencyVolumes(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.byKey(emergencyVolumesKey),
+    400,
+    scrollable: _dashboardScrollable(),
+    maxScrolls: 40,
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<_Harness> _pumpDashboard(WidgetTester tester) async {

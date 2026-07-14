@@ -70,6 +70,45 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final controls = Column(
+      children: [
+        _VolumeSlider(
+          label: 'Master',
+          value: _local.master * 100,
+          onChangeStart: _restoreBusy ? null : _beginDrag,
+          onChangeEnd: _restoreBusy ? null : _endDrag,
+          onChanged: _restoreBusy
+              ? null
+              : (value) => _changeVolumes(master: value / 100),
+        ),
+        _VolumeSlider(
+          label: 'Música',
+          value: _local.music * 100,
+          onChangeStart: _restoreBusy ? null : _beginDrag,
+          onChangeEnd: _restoreBusy ? null : _endDrag,
+          onChanged: _restoreBusy
+              ? null
+              : (value) => _changeVolumes(music: value / 100),
+        ),
+        _VolumeSlider(
+          label: 'Narração',
+          value: _local.narration * 100,
+          onChangeStart: _restoreBusy ? null : _beginDrag,
+          onChangeEnd: _restoreBusy ? null : _endDrag,
+          onChanged: _restoreBusy
+              ? null
+              : (value) => _changeVolumes(narration: value / 100),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _restoreBusy ? null : _restore,
+            icon: const Icon(Icons.restore),
+            label: const Text('Restaurar predefinições'),
+          ),
+        ),
+      ],
+    );
     return Card(
       margin: widget.compact ? EdgeInsets.zero : null,
       child: ExpansionTile(
@@ -94,52 +133,17 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
           widget.compact ? 4 : 16,
         ),
         children: [
-          SizedBox(
-            height: widget.compact ? 104 : 260,
-            child: SingleChildScrollView(
-              primary: false,
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  _VolumeSlider(
-                    label: 'Master',
-                    value: _local.master * 100,
-                    onChangeStart: _restoreBusy ? null : _beginDrag,
-                    onChangeEnd: _restoreBusy ? null : _endDrag,
-                    onChanged: _restoreBusy
-                        ? null
-                        : (value) => _changeVolumes(master: value / 100),
-                  ),
-                  _VolumeSlider(
-                    label: 'Música',
-                    value: _local.music * 100,
-                    onChangeStart: _restoreBusy ? null : _beginDrag,
-                    onChangeEnd: _restoreBusy ? null : _endDrag,
-                    onChanged: _restoreBusy
-                        ? null
-                        : (value) => _changeVolumes(music: value / 100),
-                  ),
-                  _VolumeSlider(
-                    label: 'Narração',
-                    value: _local.narration * 100,
-                    onChangeStart: _restoreBusy ? null : _beginDrag,
-                    onChangeEnd: _restoreBusy ? null : _endDrag,
-                    onChanged: _restoreBusy
-                        ? null
-                        : (value) => _changeVolumes(narration: value / 100),
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _restoreBusy ? null : _restore,
-                      icon: const Icon(Icons.restore),
-                      label: const Text('Restaurar predefinições'),
-                    ),
-                  ),
-                ],
+          if (widget.expanded)
+            controls
+          else
+            SizedBox(
+              height: widget.compact ? 104 : 260,
+              child: SingleChildScrollView(
+                primary: false,
+                padding: EdgeInsets.zero,
+                child: controls,
               ),
             ),
-          ),
         ],
       ),
     );

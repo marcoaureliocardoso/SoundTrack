@@ -101,7 +101,13 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
             }
             if (widget.controller.events.isEmpty) {
               return const Center(
-                child: Text('Nenhum evento. Crie o primeiro para começar.'),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Nenhum evento. Crie o primeiro para começar.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               );
             }
             return RefreshIndicator(

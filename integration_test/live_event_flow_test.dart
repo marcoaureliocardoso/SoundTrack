@@ -77,6 +77,20 @@ void main() {
       expect(playback.requests.last.narrationEnabled, isTrue);
       expect(playback.requests.last.fadeIn, const Duration(seconds: 1));
 
+      final requestCountBeforePending = playback.requests.length;
+      await tester.ensureVisible(find.byKey(liveMomentKey('moment-3')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(liveMomentKey('moment-3')));
+      await _pumpFlow(tester);
+      expect(playback.requests, hasLength(requestCountBeforePending));
+      expect(playback.snapshot.value.activeMomentId, 'moment-2');
+
+      await tester.scrollUntilVisible(
+        find.byKey(narrationKey),
+        300,
+        scrollable: _dashboardScrollable(),
+        maxScrolls: 20,
+      );
       await tester.tap(find.byKey(narrationKey));
       await _pumpFlow(tester);
       expect(playback.snapshot.value.narrationActive, isTrue);
@@ -85,12 +99,7 @@ void main() {
       await _pumpFlow(tester);
       expect(playback.snapshot.value.narrationActive, isFalse);
 
-      final requestCountBeforePending = playback.requests.length;
-      await tester.tap(find.byKey(liveMomentKey('moment-3')));
-      await _pumpFlow(tester);
-      expect(playback.requests, hasLength(requestCountBeforePending));
-      expect(playback.snapshot.value.activeMomentId, 'moment-2');
-
+      await tester.ensureVisible(find.byKey(emergencyVolumesKey));
       await tester.tap(find.byKey(emergencyVolumesKey));
       await _pumpFlow(tester);
       final masterSlider = tester.widget<Slider>(find.byType(Slider).first);
@@ -111,6 +120,7 @@ void main() {
       expect(playback.stopCalls, 0);
       expect(playback.snapshot.value.activeMomentId, 'moment-2');
 
+      await tester.ensureVisible(find.byKey(stopPlaybackKey));
       await tester.tap(find.byKey(stopPlaybackKey));
       await _pumpFlow(tester);
       await tester.tap(find.text('Parar reprodução'));
@@ -145,6 +155,11 @@ void main() {
     },
   );
 }
+
+Finder _dashboardScrollable() => find.descendant(
+  of: find.byKey(liveDashboardScrollKey),
+  matching: find.byType(Scrollable),
+);
 
 void _connectPlaybackSnapshots(FakeLivePlaybackPort playback) {
   playback.onStartMoment = (request) async {

@@ -2,10 +2,54 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/presentation/moment_editor_sheet.dart';
 
+import '../../../support/accessibility_test_harness.dart';
+
 void main() {
+  for (final testCase in accessibilityTestCases) {
+    testWidgets(
+      'keeps long audio and controls reachable at ${accessibilityTestCaseLabel(testCase)}',
+      (tester) async {
+        final moment =
+            EventMoment.create(
+              id: 'moment-1',
+              position: 0,
+              name: 'Entrada',
+            ).copyWith(
+              audio: const AudioReference(
+                uri: 'content://track',
+                displayName:
+                    'arquivo-de-musica-com-um-nome-extremamente-longo-para-evento.mp3',
+                pending: false,
+                artist: null,
+                duration: null,
+              ),
+            );
+
+        await pumpAccessibleApp(
+          tester,
+          viewport: testCase.viewport,
+          textScale: testCase.textScale,
+          home: Scaffold(
+            body: MomentEditorSheet(moment: moment, onSave: (_) {}),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        await tester.drag(
+          find.byType(SingleChildScrollView),
+          const Offset(0, -900),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Concluir'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('reports audio selection failure and prevents reentry', (
     tester,
   ) async {
