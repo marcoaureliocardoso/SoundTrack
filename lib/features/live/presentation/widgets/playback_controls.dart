@@ -35,6 +35,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   @override
   Widget build(BuildContext context) {
     final playback = widget.playback;
+    final colors = Theme.of(context).colorScheme;
+    final inactiveForeground = colors.onSurfaceVariant;
     final hasCurrent = playback.activeMomentId != null;
     final paused = playback.phase == PlaybackPhase.paused;
     final pause = _Control(
@@ -42,6 +44,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       icon: paused ? Icons.play_arrow : Icons.pause,
       label: paused ? 'Retomar' : 'Pausar',
       compact: widget.compact,
+      disabledForegroundColor: inactiveForeground,
       onPressed: hasCurrent && !_transportBusy
           ? () => _runTransport(paused ? widget.onResume : widget.onPause)
           : null,
@@ -51,24 +54,31 @@ class _PlaybackControlsState extends State<PlaybackControls> {
       icon: Icons.stop,
       label: 'Parar',
       compact: widget.compact,
+      disabledForegroundColor: inactiveForeground,
       onPressed: hasCurrent && !_stopBusy ? _runStop : null,
     );
     final narrationLabel = playback.narrationActive
         ? 'Narração ativa'
         : 'Narração inativa';
+    final narrationEnabled = widget.narrationAvailable && !_narrationBusy;
+    final compactNarrationForeground = playback.narrationActive
+        ? colors.onSecondaryContainer
+        : narrationEnabled
+        ? colors.onSurface
+        : inactiveForeground;
     final compactNarration = Semantics(
       label: narrationLabel,
       button: true,
       toggled: playback.narrationActive,
-      enabled: widget.narrationAvailable && !_narrationBusy,
+      enabled: narrationEnabled,
       excludeSemantics: true,
       child: Material(
         color: playback.narrationActive
-            ? Theme.of(context).colorScheme.secondaryContainer
+            ? colors.secondaryContainer
             : Colors.transparent,
         child: InkWell(
           key: narrationKey,
-          onTap: widget.narrationAvailable && !_narrationBusy
+          onTap: narrationEnabled
               ? () => _runNarration(!playback.narrationActive)
               : null,
           child: SizedBox(
@@ -76,11 +86,14 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             child: Row(
               children: [
                 const SizedBox(width: 8),
-                const Icon(Icons.mic, size: 20),
+                Icon(Icons.mic, size: 20, color: compactNarrationForeground),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     narrationLabel,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: compactNarrationForeground,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -94,22 +107,30 @@ class _PlaybackControlsState extends State<PlaybackControls> {
     );
     final narration = Semantics(
       label: narrationLabel,
-      enabled: widget.narrationAvailable && !_narrationBusy,
+      enabled: narrationEnabled,
       child: FilterChip(
         key: narrationKey,
-        avatar: const Icon(Icons.mic, size: 20),
+        avatar: Icon(
+          Icons.mic,
+          size: 20,
+          color: narrationEnabled ? null : inactiveForeground,
+        ),
         label: Text(
           narrationLabel,
+          style: narrationEnabled
+              ? null
+              : Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: inactiveForeground),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        side: narrationEnabled ? null : BorderSide(color: inactiveForeground),
         selected: playback.narrationActive,
         visualDensity: widget.compact
             ? VisualDensity.compact
             : VisualDensity.standard,
-        onSelected: widget.narrationAvailable && !_narrationBusy
-            ? _runNarration
-            : null,
+        onSelected: narrationEnabled ? _runNarration : null,
       ),
     );
     if (widget.compact) {
@@ -191,6 +212,7 @@ class _Control extends StatelessWidget {
     required this.label,
     required this.onPressed,
     required this.compact,
+    required this.disabledForegroundColor,
     super.key,
   });
 
@@ -198,19 +220,30 @@ class _Control extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool compact;
+  final Color disabledForegroundColor;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onPressed != null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
+          style: IconButton.styleFrom(
+            disabledForegroundColor: disabledForegroundColor,
+          ),
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: onPressed,
           tooltip: label,
           icon: Icon(icon),
         ),
-        if (!compact) Text(label),
+        if (!compact)
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: enabled ? null : disabledForegroundColor,
+            ),
+          ),
       ],
     );
   }
