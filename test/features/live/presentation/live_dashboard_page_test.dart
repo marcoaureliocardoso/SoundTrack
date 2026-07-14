@@ -16,7 +16,7 @@ import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 import '../../../support/fake_live_playback_port.dart';
 
 void main() {
-  testWidgets('shows confirmed route and information-only now playing', (
+  testWidgets('shows confirmed route and compact now-playing details action', (
     tester,
   ) async {
     final harness = await _pumpDashboard(tester);
@@ -30,7 +30,7 @@ void main() {
           .getSemantics(find.byKey(nowPlayingPanelKey))
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
-      isFalse,
+      isTrue,
     );
     expect(
       tester
@@ -38,7 +38,7 @@ void main() {
           .getSemanticsData()
           .flagsCollection
           .isButton,
-      isFalse,
+      isTrue,
     );
 
     await harness.dispose(tester);

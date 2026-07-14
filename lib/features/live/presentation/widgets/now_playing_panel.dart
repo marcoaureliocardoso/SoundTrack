@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../application/live_event_state.dart';
 import '../../../playback/domain/playback_snapshot.dart';
+import '../live_dashboard_keys.dart';
+import 'track_name_ticker.dart';
 
 class NowPlayingPanel extends StatelessWidget {
   const NowPlayingPanel({required this.state, this.compact = false, super.key});
@@ -25,37 +27,64 @@ class NowPlayingPanel extends StatelessWidget {
     };
     final time =
         '${_format(playback.position)} / ${_format(state.currentAudioDuration)}';
+    void showTrackDetails() {
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: nowPlayingDetailsKey,
+          title: const Text('Faixa atual'),
+          content: SelectableText(track),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fechar'),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Semantics(
       container: true,
       label: 'Agora: $moment. Faixa: $track. $status. Tempo $time.',
+      button: compact,
+      onTap: compact ? showTrackDetails : null,
       excludeSemantics: true,
       child: Card(
         color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        child: Padding(
-          padding: EdgeInsets.all(compact ? 8 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('AGORA', style: Theme.of(context).textTheme.labelLarge),
-              SizedBox(height: compact ? 2 : 8),
-              Text(
-                moment,
-                style: compact
-                    ? Theme.of(context).textTheme.titleMedium
-                    : Theme.of(context).textTheme.headlineSmall,
-              ),
-              SizedBox(height: compact ? 2 : 4),
-              Text(track, style: Theme.of(context).textTheme.titleMedium),
-              if (state.currentAudioArtist case final artist?)
-                Text(artist, overflow: TextOverflow.ellipsis),
-              SizedBox(height: compact ? 4 : 12),
-              Wrap(
-                spacing: 16,
-                runSpacing: 4,
-                children: [Text(status), Text(time)],
-              ),
-            ],
+        child: InkWell(
+          onTap: compact ? showTrackDetails : null,
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 8 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('AGORA', style: Theme.of(context).textTheme.labelLarge),
+                SizedBox(height: compact ? 2 : 8),
+                Text(
+                  moment,
+                  style: compact
+                      ? Theme.of(context).textTheme.titleMedium
+                      : Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (!compact) ...[
+                  const SizedBox(height: 4),
+                  TrackNameTicker(
+                    key: nowPlayingTrackKey,
+                    text: track,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (state.currentAudioArtist case final artist?)
+                    Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+                SizedBox(height: compact ? 4 : 12),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 4,
+                  children: [Text(status), Text(time)],
+                ),
+              ],
+            ),
           ),
         ),
       ),
