@@ -321,9 +321,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
       builder: (context, _) {
         final state = widget.controller.state.value;
         return EmergencyVolumePanel(
-          expanded: expanded,
           playback: state.playback,
-          onToggle: widget.controller.toggleControlsExpanded,
           onVolumesChanged: widget.controller.setSessionVolumes,
           onRestore: widget.controller.restorePresetVolumes,
           compact: compact,
