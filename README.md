@@ -7,10 +7,12 @@ para permitir uma fala sobre a trilha.
 
 ## Estado da versão
 
-A versão atual é `1.0.0+2`, a primeira versão estável. Ela promove o RC
-`1.0.0-rc.1+1` já aprovado, sem mudanças funcionais, e incrementa o
-`versionCode` Android porque o candidato anterior foi distribuído. O APK
-oficial assinado e seu checksum são publicados na GitHub Release `v1.0.0`.
+A versão de desenvolvimento é `1.0.1+3` e reúne as correções de acessibilidade
+descritas em `[Unreleased]` no changelog. Ela ainda não possui tag nem artefato
+oficial publicado.
+
+A última versão publicada continua sendo `1.0.0+2`, disponível com APK assinado
+e checksum na [GitHub Release `v1.0.0`](https://github.com/marcoaureliocardoso/SoundTrack/releases/tag/v1.0.0).
 
 ## Funcionalidades
 
@@ -75,7 +77,7 @@ do diff. O destino padrão é `emulator-5554`; para outro emulador ou aparelho,
 defina `SOUNDTRACK_ANDROID_DEVICE`:
 
 ```powershell
-$env:SOUNDTRACK_ANDROID_DEVICE='192.168.1.186:38213'
+$env:SOUNDTRACK_ANDROID_DEVICE='<serial-ou-endereco-do-dispositivo>'
 .\tool\run_android_acceptance.ps1
 ```
 

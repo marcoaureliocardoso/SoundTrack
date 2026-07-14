@@ -1,6 +1,6 @@
 # Checklist de aceitação do MVP SoundTrack
 
-Atualizado em 12 de julho de 2026.
+Atualizado em 14 de julho de 2026.
 
 ## Escopo das rodadas
 

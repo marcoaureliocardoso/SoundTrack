@@ -5,11 +5,16 @@
 O SoundTrack usa versionamento semântico no formato `MAJOR.MINOR.PATCH`. Um
 sufixo identifica candidatos ainda não promovidos à versão estável.
 
-A versão atual é `1.0.0+2`:
+A versão de desenvolvimento é `1.0.1+3`:
 
-- `1.0.0` é o nome público da primeira versão estável;
-- `+2` gera o `versionCode` Android;
-- o incremento de `+1` para `+2` é obrigatório porque o RC foi distribuído.
+- `1.0.1` é uma correção compatível da primeira versão estável;
+- `+3` gera o próximo `versionCode` Android, superior aos artefatos já
+  distribuídos;
+- essa versão permanece não publicada enquanto suas mudanças estiverem em
+  `[Unreleased]` no changelog.
+
+A última versão publicada é `1.0.0+2`, identificada pela tag `v1.0.0`. A
+versão de desenvolvimento não deve ser confundida com um artefato oficial.
 
 O `versionCode` deve crescer em todo artefato distribuído. Uma reconstrução
 destinada a usuários não pode reutilizar um número já publicado, mesmo quando
@@ -25,6 +30,8 @@ incremento do esquema enquanto o formato exportado permanecer compatível.
 
 O candidato `1.0.0-rc.1` foi promovido para `1.0.0` depois dos gates
 automatizados, da validação do APK assinado e da decisão explícita de release.
+Uma tag ou GitHub Release `v1.0.1` somente será criada após nova validação e
+decisão explícita de publicação.
 
 As tags `v1.0.0-rc.1` e `v1.0.0` devem apontar para os commits exatos usados
 nos respectivos builds. Tags e GitHub Releases não são usados para builds

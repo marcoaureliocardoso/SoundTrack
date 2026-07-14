@@ -4,6 +4,11 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+### Changed
+
+- Metadados da próxima correção preparados como `1.0.1+3`; `v1.0.0` permanece
+  a última versão publicada.
+
 ### Fixed
 
 - Layouts de Dashboard, editores e religamento agora respeitam fontes Android
