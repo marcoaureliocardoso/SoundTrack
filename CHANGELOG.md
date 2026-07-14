@@ -4,6 +4,13 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+### Fixed
+
+- Cartões de momentos agora usam foreground uniforme e contraste WCAG AA em
+  número, nome, faixa e estado.
+- Controles inativos de transporte e Narração permanecem visualmente inativos,
+  mas legíveis no Dashboard escuro.
+
 ## [1.0.1] - 2026-07-14
 
 ### Changed
