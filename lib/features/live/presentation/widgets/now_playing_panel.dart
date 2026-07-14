@@ -59,13 +59,17 @@ class NowPlayingPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AGORA', style: Theme.of(context).textTheme.labelLarge),
-                SizedBox(height: compact ? 2 : 8),
+                if (!compact) ...[
+                  Text('AGORA', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                ],
                 Text(
                   moment,
                   style: compact
                       ? Theme.of(context).textTheme.titleMedium
                       : Theme.of(context).textTheme.headlineSmall,
+                  maxLines: compact ? 1 : null,
+                  overflow: compact ? TextOverflow.ellipsis : null,
                 ),
                 if (!compact) ...[
                   const SizedBox(height: 4),
@@ -77,12 +81,19 @@ class NowPlayingPanel extends StatelessWidget {
                   if (state.currentAudioArtist case final artist?)
                     Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
-                SizedBox(height: compact ? 4 : 12),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 4,
-                  children: [Text(status), Text(time)],
-                ),
+                SizedBox(height: compact ? 2 : 12),
+                if (compact)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 2,
+                    children: [Text(status), Text(time)],
+                  )
+                else
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 4,
+                    children: [Text(status), Text(time)],
+                  ),
               ],
             ),
           ),

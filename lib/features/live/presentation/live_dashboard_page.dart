@@ -107,6 +107,10 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
+          if (widget.controller.state.value.controlsExpanded) {
+            widget.controller.toggleControlsExpanded();
+            return;
+          }
           _confirmExit();
         }
       },
@@ -167,18 +171,36 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                   constraints.maxHeight < 650 ||
                   MediaQuery.textScalerOf(context).scale(1) > 1.4;
               final veryShort = constraints.maxHeight < 360;
+              final reduceMotion = MediaQuery.disableAnimationsOf(context);
               return _LiveStateSelector<bool>(
                 state: widget.controller.state,
                 select: (state) => state.controlsExpanded,
-                builder: (context, volumesExpanded) => volumesExpanded
-                    ? _buildExpandedVolumes(compact: compact)
-                    : _buildNormalDashboard(
-                        context: context,
-                        event: event,
-                        momentCount: momentCount,
-                        compact: compact,
-                        veryShort: veryShort,
+                builder: (context, volumesExpanded) => Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    veryShort ? 0 : (compact ? 4 : 12),
+                    16,
+                    veryShort ? 0 : (compact ? 4 : 12),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildNowPlaying(compact: compact),
+                      _buildAlert(compact: compact || veryShort),
+                      Expanded(
+                        key: liveDashboardCenterKey,
+                        child: _buildCenter(
+                          context: context,
+                          event: event,
+                          momentCount: momentCount,
+                          volumesExpanded: volumesExpanded,
+                          compact: compact,
+                          reduceMotion: reduceMotion,
+                        ),
                       ),
+                      _buildControls(compact: compact || veryShort),
+                    ],
+                  ),
+                ),
               );
             },
           ),
@@ -187,61 +209,21 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
     );
   }
 
-  Widget _buildExpandedVolumes({required bool compact}) {
-    return SingleChildScrollView(
-      primary: false,
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        children: [
-          _buildAlert(),
-          _LiveStateSelector<_NowPlayingSlice>(
-            state: widget.controller.state,
-            select: _selectNowPlaying,
-            builder: (context, _) => NowPlayingPanel(
-              key: nowPlayingPanelKey,
-              state: widget.controller.state.value,
-              compact: true,
-            ),
-          ),
-          _buildControls(compact: true),
-          _buildVolumes(expanded: true, compact: compact),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNormalDashboard({
+  Widget _buildCenter({
     required BuildContext context,
     required SoundTrackEvent event,
     required int momentCount,
+    required bool volumesExpanded,
     required bool compact,
-    required bool veryShort,
+    required bool reduceMotion,
   }) {
-    return CustomScrollView(
+    final momentsScroll = CustomScrollView(
       key: liveDashboardScrollKey,
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            veryShort ? 0 : (compact ? 4 : 12),
-            16,
-            veryShort ? 0 : (compact ? 4 : 12),
-          ),
+          padding: const EdgeInsets.only(top: 16),
           sliver: SliverMainAxisGroup(
             slivers: [
-              SliverToBoxAdapter(child: _buildAlert()),
-              SliverToBoxAdapter(
-                child: _LiveStateSelector<_NowPlayingSlice>(
-                  state: widget.controller.state,
-                  select: _selectNowPlaying,
-                  builder: (context, _) => NowPlayingPanel(
-                    key: nowPlayingPanelKey,
-                    state: widget.controller.state.value,
-                    compact: compact,
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
               SliverToBoxAdapter(
                 child: Text(
                   'MOMENTOS — TOQUE PARA INICIAR',
@@ -265,20 +247,63 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                   );
                 },
               ),
-              SliverToBoxAdapter(
-                child: _buildControls(compact: compact || veryShort),
-              ),
-              SliverToBoxAdapter(
-                child: _buildVolumes(expanded: false, compact: true),
-              ),
             ],
           ),
         ),
       ],
     );
+    final duration = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 250);
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedOpacity(
+            opacity: volumesExpanded ? 0 : 1,
+            duration: duration,
+            child: IgnorePointer(
+              ignoring: volumesExpanded,
+              child: ExcludeSemantics(
+                excluding: volumesExpanded,
+                child: momentsScroll,
+              ),
+            ),
+          ),
+          AnimatedSlide(
+            key: emergencyVolumesCurtainKey,
+            offset: volumesExpanded ? Offset.zero : const Offset(0, 1),
+            duration: duration,
+            curve: Curves.easeOutCubic,
+            child: IgnorePointer(
+              ignoring: !volumesExpanded,
+              child: ExcludeSemantics(
+                excluding: !volumesExpanded,
+                child: Padding(
+                  padding: EdgeInsets.only(top: compact ? 4 : 12),
+                  child: _buildVolumes(compact: compact),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildAlert() {
+  Widget _buildNowPlaying({required bool compact}) {
+    return _LiveStateSelector<_NowPlayingSlice>(
+      state: widget.controller.state,
+      select: _selectNowPlaying,
+      builder: (context, _) => NowPlayingPanel(
+        key: nowPlayingPanelKey,
+        state: widget.controller.state.value,
+        compact: compact,
+      ),
+    );
+  }
+
+  Widget _buildAlert({required bool compact}) {
     return _LiveStateSelector<PlaybackAlert?>(
       state: widget.controller.state,
       select: (state) => state.visibleAlert,
@@ -287,6 +312,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
           : LiveAlertBanner(
               alert: alert,
               onDismiss: widget.controller.dismissAlert,
+              compact: compact,
             ),
     );
   }
@@ -313,7 +339,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
     );
   }
 
-  Widget _buildVolumes({required bool expanded, required bool compact}) {
+  Widget _buildVolumes({required bool compact}) {
     return _LiveStateSelector<_VolumesSlice>(
       key: _emergencyVolumesSelectorKey,
       state: widget.controller.state,
