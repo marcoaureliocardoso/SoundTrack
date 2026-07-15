@@ -29,20 +29,23 @@ void main() {
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final appBar = tester.widget<AppBar>(find.byType(AppBar));
-    final floatingActionButton = tester.widget<FloatingActionButton>(
-      find.byType(FloatingActionButton),
-    );
-    final eventLibraryContext = tester.element(find.text('Meus Eventos'));
+    final eventLibraryContext = tester.element(find.text('Eventos'));
 
     expect(materialApp.theme?.useMaterial3, isTrue);
     expect(Theme.of(eventLibraryContext).brightness, Brightness.dark);
     expect(
       appBar.title,
-      isA<Text>().having((title) => title.data, 'data', 'Meus Eventos'),
+      isA<Text>().having((title) => title.data, 'data', 'Eventos'),
     );
-    expect(find.text('Meus Eventos'), findsOneWidget);
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(floatingActionButton.onPressed, isNotNull);
+    expect(find.text('Eventos'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(
+      tester.widget<TextButton>(find.byKey(addEventKey)).onPressed,
+      isNotNull,
+    );
+    expect(find.byKey(libraryMenuKey), findsOneWidget);
+    await tester.tap(find.byKey(libraryMenuKey));
+    await tester.pumpAndSettle();
     expect(find.byKey(openAudioEngineLabKey), findsOneWidget);
   });
 
