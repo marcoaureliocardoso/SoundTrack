@@ -12,6 +12,41 @@ import '../../../support/in_memory_event_repository.dart';
 
 void main() {
   group('EventEditorController', () {
+    test('creates and inserts a complete moment draft', () {
+      final controller = EventEditorController(
+        repository: InMemoryEventRepository(),
+        initial: SoundTrackEvent.create(id: 'event', name: 'Jaleco'),
+        newId: () => 'moment-1',
+      );
+      final draft = controller.createMomentDraft().copyWith(
+        name: 'Entrada',
+        narrationEnabled: true,
+      );
+
+      controller.insertMoment(draft);
+
+      expect(controller.draft.moments.single.name, 'Entrada');
+      expect(controller.draft.moments.single.narrationEnabled, isTrue);
+      expect(controller.dirty, isTrue);
+    });
+
+    test('rejects insertion of a duplicate moment id', () {
+      final initial = SoundTrackEvent.create(id: 'event', name: 'Jaleco')
+          .addMoment(
+            EventMoment.create(id: 'moment-1', position: 0, name: 'Entrada'),
+          );
+      final controller = EventEditorController(
+        repository: InMemoryEventRepository(),
+        initial: initial,
+        newId: () => 'moment-2',
+      );
+
+      expect(
+        () => controller.insertMoment(initial.moments.single),
+        throwsArgumentError,
+      );
+    });
+
     test('renames, adds a moment, and saves the edited aggregate', () async {
       final initial = SoundTrackEvent.create(id: 'e1', name: 'Antes');
       final repository = InMemoryEventRepository([initial]);

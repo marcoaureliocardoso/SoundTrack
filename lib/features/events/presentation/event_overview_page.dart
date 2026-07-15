@@ -190,33 +190,29 @@ class _EventOverviewPageState extends State<EventOverviewPage> {
         EditorialSectionHeader(
           title: 'Áudio do evento',
           actionLabel: 'Ajustar',
-          onAction: () => _edit(event),
+          actionKey: adjustEventAudioKey,
+          onAction: () =>
+              _edit(event, initialSection: EventEditorInitialSection.audio),
         ),
-        KeyedSubtree(
-          key: adjustEventAudioKey,
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _AudioMetric(
-                label: 'Master',
-                value: _percentage(settings.masterVolume),
-              ),
-              _AudioMetric(
-                label: 'Música',
-                value: _percentage(settings.musicVolume),
-              ),
-              _AudioMetric(
-                label: 'Música durante a narração',
-                value: _percentage(settings.narrationVolume),
-              ),
-              _AudioMetric(label: 'Fade-in', value: _seconds(settings.fadeIn)),
-              _AudioMetric(
-                label: 'Fade-out',
-                value: _seconds(settings.fadeOut),
-              ),
-            ],
-          ),
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            _AudioMetric(
+              label: 'Master',
+              value: _percentage(settings.masterVolume),
+            ),
+            _AudioMetric(
+              label: 'Música',
+              value: _percentage(settings.musicVolume),
+            ),
+            _AudioMetric(
+              label: 'Música durante a narração',
+              value: _percentage(settings.narrationVolume),
+            ),
+            _AudioMetric(label: 'Fade-in', value: _seconds(settings.fadeIn)),
+            _AudioMetric(label: 'Fade-out', value: _seconds(settings.fadeOut)),
+          ],
         ),
       ],
     );
@@ -243,13 +239,17 @@ class _EventOverviewPageState extends State<EventOverviewPage> {
     };
   }
 
-  Future<void> _edit(SoundTrackEvent event) async {
+  Future<void> _edit(
+    SoundTrackEvent event, {
+    EventEditorInitialSection initialSection = EventEditorInitialSection.top,
+  }) async {
     final controller = widget.createEditorController(event);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => EventEditorPage(
           controller: controller,
           onSelectAudio: widget.onSelectAudio,
+          initialSection: initialSection,
         ),
       ),
     );

@@ -50,7 +50,7 @@ void main() {
     await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
     await tester.tap(find.text('Adicionar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.save));
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();

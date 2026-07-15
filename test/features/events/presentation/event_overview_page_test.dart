@@ -4,6 +4,7 @@ import 'package:soundtrack/features/events/application/event_editor_controller.d
 import 'package:soundtrack/features/events/application/event_library_controller.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
+import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
 import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
 
@@ -104,6 +105,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Verificação de Jaleco'), findsOneWidget);
+  });
+
+  testWidgets('audio adjustment opens structure positioned at event audio', (
+    tester,
+  ) async {
+    final fixture = await _fixture();
+    await _openOverview(tester, fixture);
+    await tester.scrollUntilVisible(
+      find.byKey(adjustEventAudioKey),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    await tester.tap(find.byKey(adjustEventAudioKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EventEditorPage), findsOneWidget);
+    expect(find.byKey(eventAudioSectionKey), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(eventAudioSectionKey)).dy,
+      lessThan(180),
+    );
   });
 }
 

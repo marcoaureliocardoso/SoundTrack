@@ -58,16 +58,21 @@ class EventEditorController extends ChangeNotifier {
     );
   }
 
+  EventMoment createMomentDraft() => EventMoment.create(
+    id: _newId(),
+    position: _draft.moments.length,
+    name: '',
+  );
+
+  void insertMoment(EventMoment moment) {
+    if (_draft.moments.any((candidate) => candidate.id == moment.id)) {
+      throw ArgumentError.value(moment.id, 'moment.id', 'already exists');
+    }
+    _replaceDraft(_draft.addMoment(moment));
+  }
+
   void addMoment(String name) {
-    _replaceDraft(
-      _draft.addMoment(
-        EventMoment.create(
-          id: _newId(),
-          position: _draft.moments.length,
-          name: name,
-        ),
-      ),
-    );
+    insertMoment(createMomentDraft().copyWith(name: name));
   }
 
   void updateMoment(EventMoment moment) {

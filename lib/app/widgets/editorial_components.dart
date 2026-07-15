@@ -6,6 +6,7 @@ class EditorialSectionHeader extends StatelessWidget {
   const EditorialSectionHeader({
     required this.title,
     this.actionLabel,
+    this.actionKey,
     this.onAction,
     super.key,
   }) : assert(
@@ -15,6 +16,7 @@ class EditorialSectionHeader extends StatelessWidget {
 
   final String title;
   final String? actionLabel;
+  final Key? actionKey;
   final VoidCallback? onAction;
 
   @override
@@ -32,6 +34,7 @@ class EditorialSectionHeader extends StatelessWidget {
         ),
         if (actionLabel != null)
           TextButton(
+            key: actionKey,
             onPressed: onAction,
             style: TextButton.styleFrom(
               minimumSize: const Size(
