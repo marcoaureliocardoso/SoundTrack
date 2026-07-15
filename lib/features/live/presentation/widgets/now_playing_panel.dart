@@ -121,11 +121,18 @@ class NowPlayingPanel extends StatelessWidget {
                       ),
                   ],
                   SizedBox(height: compact ? 2 : 12),
-                  Wrap(
-                    spacing: compact ? 8 : 16,
-                    runSpacing: compact ? 2 : 4,
-                    children: [Text(status), Text(time)],
-                  ),
+                  if (compact)
+                    Text(
+                      '$status · $time',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 4,
+                      children: [Text(status), Text(time)],
+                    ),
                   if (!compact) ...[
                     const SizedBox(height: 12),
                     LinearProgressIndicator(

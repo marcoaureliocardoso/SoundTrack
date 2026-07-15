@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/soundtrack_theme.dart';
 import '../../../playback/domain/playback_snapshot.dart';
 import '../live_dashboard_keys.dart';
 
@@ -7,24 +8,20 @@ class PlaybackControls extends StatefulWidget {
   const PlaybackControls({
     required this.playback,
     required this.narrationAvailable,
-    required this.volumesExpanded,
     required this.onPause,
     required this.onResume,
     required this.onStop,
     required this.onNarrationChanged,
-    required this.onVolumesToggle,
     this.compact = false,
     super.key,
   });
 
   final PlaybackSnapshot playback;
   final bool narrationAvailable;
-  final bool volumesExpanded;
   final Future<void> Function() onPause;
   final Future<void> Function() onResume;
   final Future<void> Function() onStop;
   final Future<void> Function(bool active) onNarrationChanged;
-  final VoidCallback onVolumesToggle;
   final bool compact;
 
   @override
@@ -48,79 +45,66 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         : 'Narração inativa';
     final narrationEnabled = widget.narrationAvailable && !_narrationBusy;
 
-    return Card(
+    return Material(
       key: playbackFooterKey,
-      margin: EdgeInsets.zero,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showLabels =
-              !widget.compact &&
-              constraints.maxWidth >= 360 &&
-              MediaQuery.textScalerOf(context).scale(1) <= 1.4;
-          return SizedBox(
-            height: showLabels ? 76 : 56,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _Control(
-                    key: pausePlaybackKey,
-                    icon: paused ? Icons.play_arrow : Icons.pause,
-                    label: paused ? 'Retomar' : 'Pausar',
-                    showLabel: showLabels,
-                    disabledForegroundColor: inactiveForeground,
-                    onPressed: hasCurrent && !_transportBusy
-                        ? () => _runTransport(
-                            paused ? widget.onResume : widget.onPause,
-                          )
-                        : null,
-                  ),
-                ),
-                Expanded(
-                  child: _Control(
-                    key: stopPlaybackKey,
-                    icon: Icons.stop,
-                    label: 'Parar',
-                    showLabel: showLabels,
-                    disabledForegroundColor: inactiveForeground,
-                    onPressed: hasCurrent && !_stopBusy ? _runStop : null,
-                  ),
-                ),
-                Expanded(
-                  child: _ToggleControl(
-                    controlKey: narrationKey,
-                    icon: Icons.mic,
-                    label: narrationLabel,
-                    showLabel: showLabels,
-                    selected: playback.narrationActive,
-                    enabled: narrationEnabled,
-                    selectedColor: colors.secondaryContainer,
-                    selectedForeground: colors.onSecondaryContainer,
-                    foreground: colors.onSurface,
-                    disabledForeground: inactiveForeground,
-                    onPressed: narrationEnabled
-                        ? () => _runNarration(!playback.narrationActive)
-                        : null,
-                  ),
-                ),
-                Expanded(
-                  child: _ToggleControl(
-                    controlKey: volumesToggleKey,
-                    icon: Icons.tune,
-                    label: 'Volumes',
-                    showLabel: showLabels,
-                    selected: widget.volumesExpanded,
-                    enabled: true,
-                    selectedColor: colors.primaryContainer,
-                    selectedForeground: colors.onPrimaryContainer,
-                    foreground: colors.onSurface,
-                    disabledForeground: inactiveForeground,
-                    onPressed: widget.onVolumesToggle,
-                  ),
-                ),
-              ],
+      color: SoundTrackTokens.surface,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 100,
+              child: _DockControl(
+                controlKey: pausePlaybackKey,
+                icon: paused ? Icons.play_arrow : Icons.pause,
+                label: paused ? 'Retomar' : 'Pausar',
+                showLabel: !widget.compact,
+                foreground: hasCurrent ? colors.onSurface : inactiveForeground,
+                background: colors.surfaceContainerHigh,
+                onPressed: hasCurrent && !_transportBusy
+                    ? () => _runTransport(
+                        paused ? widget.onResume : widget.onPause,
+                      )
+                    : null,
+              ),
             ),
-          );
-        },
+            Expanded(
+              flex: 100,
+              child: _DockControl(
+                controlKey: stopPlaybackKey,
+                icon: Icons.stop,
+                label: 'Parar',
+                showLabel: !widget.compact,
+                foreground: hasCurrent
+                    ? SoundTrackTokens.destructive
+                    : inactiveForeground,
+                borderColor: hasCurrent
+                    ? SoundTrackTokens.destructive
+                    : SoundTrackTokens.border,
+                onPressed: hasCurrent && !_stopBusy ? _runStop : null,
+              ),
+            ),
+            Expanded(
+              flex: 135,
+              child: _DockControl(
+                controlKey: narrationKey,
+                icon: Icons.mic,
+                label: narrationLabel,
+                showLabel: !widget.compact,
+                toggled: playback.narrationActive,
+                foreground: narrationEnabled || playback.narrationActive
+                    ? colors.primary
+                    : inactiveForeground,
+                background: playback.narrationActive
+                    ? colors.primary.withValues(alpha: .12)
+                    : Colors.transparent,
+                onPressed: narrationEnabled
+                    ? () => _runNarration(!playback.narrationActive)
+                    : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -168,21 +152,28 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   }
 }
 
-class _Control extends StatelessWidget {
-  const _Control({
+class _DockControl extends StatelessWidget {
+  const _DockControl({
+    required this.controlKey,
     required this.icon,
     required this.label,
     required this.onPressed,
+    required this.foreground,
     required this.showLabel,
-    required this.disabledForegroundColor,
-    super.key,
+    this.background = Colors.transparent,
+    this.borderColor,
+    this.toggled,
   });
 
+  final Key controlKey;
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
+  final Color foreground;
   final bool showLabel;
-  final Color disabledForegroundColor;
+  final Color background;
+  final Color? borderColor;
+  final bool? toggled;
 
   @override
   Widget build(BuildContext context) {
@@ -191,97 +182,40 @@ class _Control extends StatelessWidget {
       label: label,
       button: true,
       enabled: enabled,
-      excludeSemantics: true,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            style: IconButton.styleFrom(
-              disabledForegroundColor: disabledForegroundColor,
-            ),
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            onPressed: onPressed,
-            tooltip: label,
-            icon: Icon(icon),
-          ),
-          if (showLabel)
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: enabled ? null : disabledForegroundColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ToggleControl extends StatelessWidget {
-  const _ToggleControl({
-    required this.controlKey,
-    required this.icon,
-    required this.label,
-    required this.showLabel,
-    required this.selected,
-    required this.enabled,
-    required this.selectedColor,
-    required this.selectedForeground,
-    required this.foreground,
-    required this.disabledForeground,
-    required this.onPressed,
-  });
-
-  final Key controlKey;
-  final IconData icon;
-  final String label;
-  final bool showLabel;
-  final bool selected;
-  final bool enabled;
-  final Color selectedColor;
-  final Color selectedForeground;
-  final Color foreground;
-  final Color disabledForeground;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveForeground = !enabled
-        ? disabledForeground
-        : selected
-        ? selectedForeground
-        : foreground;
-    return Semantics(
-      label: label,
-      button: true,
-      toggled: selected,
-      enabled: enabled,
+      toggled: toggled,
       excludeSemantics: true,
       child: Material(
-        color: selected ? selectedColor : Colors.transparent,
+        color: background,
         child: InkWell(
           key: controlKey,
           onTap: onPressed,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Container(
+            constraints: const BoxConstraints(
+              minWidth: SoundTrackTokens.targetMinSize,
+              minHeight: 64,
+            ),
+            decoration: borderColor == null
+                ? null
+                : BoxDecoration(border: Border.all(color: borderColor!)),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Tooltip(
                   message: label,
-                  child: Icon(icon, size: 24, color: effectiveForeground),
+                  child: Icon(icon, color: foreground),
                 ),
-                if (showLabel)
+                if (showLabel) ...[
+                  const SizedBox(height: 4),
                   Text(
                     label,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: effectiveForeground,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: foreground),
                   ),
+                ],
               ],
             ),
           ),

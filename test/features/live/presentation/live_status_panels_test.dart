@@ -81,8 +81,7 @@ void main() {
 
     expect(find.byType(TrackNameTicker), findsNothing);
     expect(find.text('Entrada dos formandos'), findsOneWidget);
-    expect(find.text('Reproduzindo'), findsOneWidget);
-    expect(find.text('0:12 / 3:00'), findsOneWidget);
+    expect(find.text('Reproduzindo · 0:12 / 3:00'), findsOneWidget);
 
     await tester.tap(find.byKey(nowPlayingPanelKey));
     await tester.pumpAndSettle();

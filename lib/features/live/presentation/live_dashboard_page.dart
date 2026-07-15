@@ -15,6 +15,7 @@ export 'live_dashboard_keys.dart';
 
 import 'live_dashboard_keys.dart';
 import 'widgets/emergency_volume_panel.dart';
+import 'widgets/emergency_volume_toggle_bar.dart';
 import 'widgets/live_alert_banner.dart';
 import 'widgets/moment_action_button.dart';
 import 'widgets/now_playing_panel.dart';
@@ -198,6 +199,11 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                           reduceMotion: reduceMotion,
                         ),
                       ),
+                      EmergencyVolumeToggleBar(
+                        expanded: volumesExpanded,
+                        compact: compact || veryShort,
+                        onToggle: widget.controller.toggleControlsExpanded,
+                      ),
                       _buildControls(compact: compact || veryShort),
                     ],
                   ),
@@ -259,17 +265,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          AnimatedOpacity(
-            opacity: volumesExpanded ? 0 : 1,
-            duration: duration,
-            child: IgnorePointer(
-              ignoring: volumesExpanded,
-              child: ExcludeSemantics(
-                excluding: volumesExpanded,
-                child: momentsScroll,
-              ),
-            ),
-          ),
+          momentsScroll,
           AnimatedSlide(
             key: emergencyVolumesCurtainKey,
             offset: volumesExpanded ? Offset.zero : const Offset(0, 1),
@@ -279,9 +275,12 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
               ignoring: !volumesExpanded,
               child: ExcludeSemantics(
                 excluding: !volumesExpanded,
-                child: Padding(
-                  padding: EdgeInsets.only(top: compact ? 4 : 12),
-                  child: _buildVolumes(compact: compact),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: compact ? 4 : 12),
+                    child: _buildVolumes(compact: compact),
+                  ),
                 ),
               ),
             ),
@@ -327,12 +326,10 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         return PlaybackControls(
           playback: state.playback,
           narrationAvailable: state.narrationAvailable,
-          volumesExpanded: state.controlsExpanded,
           onPause: widget.controller.pause,
           onResume: widget.controller.resume,
           onStop: _confirmStop,
           onNarrationChanged: widget.controller.setNarration,
-          onVolumesToggle: widget.controller.toggleControlsExpanded,
           compact: compact,
         );
       },

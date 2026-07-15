@@ -19,12 +19,10 @@ void main() {
           body: PlaybackControls(
             playback: const PlaybackSnapshot.idle(),
             narrationAvailable: false,
-            volumesExpanded: false,
             onPause: _noop,
             onResume: _noop,
             onStop: _noop,
             onNarrationChanged: (_) async {},
-            onVolumesToggle: () {},
           ),
         ),
       ),
@@ -34,24 +32,16 @@ void main() {
     for (final label in ['Pausar', 'Parar', 'Narração inativa']) {
       expect(tester.widget<Text>(find.text(label)).style?.color, inactive);
     }
-    for (final key in [pausePlaybackKey, stopPlaybackKey]) {
-      final button = tester.widget<IconButton>(
-        find.descendant(of: find.byKey(key), matching: find.byType(IconButton)),
-      );
+    for (final key in [pausePlaybackKey, stopPlaybackKey, narrationKey]) {
       expect(
-        button.style?.foregroundColor?.resolve({WidgetState.disabled}),
+        tester
+            .widget<Icon>(
+              find.descendant(of: find.byKey(key), matching: find.byType(Icon)),
+            )
+            .color,
         inactive,
       );
     }
-    final narration = find.byKey(narrationKey);
-    expect(
-      tester
-          .widget<Icon>(
-            find.descendant(of: narration, matching: find.byType(Icon)),
-          )
-          .color,
-      inactive,
-    );
     expect(
       contrastRatio(inactive, theme.colorScheme.surfaceContainerLow),
       greaterThanOrEqualTo(4.5),
@@ -70,13 +60,11 @@ void main() {
           body: PlaybackControls(
             playback: const PlaybackSnapshot.idle(),
             narrationAvailable: false,
-            volumesExpanded: false,
             compact: true,
             onPause: _noop,
             onResume: _noop,
             onStop: _noop,
             onNarrationChanged: (_) async {},
-            onVolumesToggle: () {},
           ),
         ),
       ),
@@ -101,44 +89,6 @@ void main() {
     expect(
       contrastRatio(inactive, theme.colorScheme.surfaceContainerLow),
       greaterThanOrEqualTo(4.5),
-    );
-  });
-
-  testWidgets('keeps selected volumes icon distinct from its container', (
-    tester,
-  ) async {
-    final theme = _darkTheme();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: theme,
-        home: Scaffold(
-          body: PlaybackControls(
-            playback: const PlaybackSnapshot.idle(),
-            narrationAvailable: false,
-            volumesExpanded: true,
-            compact: true,
-            onPause: _noop,
-            onResume: _noop,
-            onStop: _noop,
-            onNarrationChanged: (_) async {},
-            onVolumesToggle: () {},
-          ),
-        ),
-      ),
-    );
-
-    final volumes = find.byKey(volumesToggleKey);
-    final icon = tester.widget<Icon>(
-      find.descendant(of: volumes, matching: find.byType(Icon)),
-    );
-    expect(icon.color, theme.colorScheme.onPrimaryContainer);
-    expect(
-      contrastRatio(
-        theme.colorScheme.onPrimaryContainer,
-        theme.colorScheme.primaryContainer,
-      ),
-      greaterThanOrEqualTo(3),
     );
   });
 }

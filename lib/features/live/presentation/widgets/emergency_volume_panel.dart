@@ -87,7 +87,7 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
               : (value) => _changeVolumes(music: value / 100),
         ),
         _VolumeSlider(
-          label: 'Narração',
+          label: 'Música durante a narração',
           value: _local.narration * 100,
           onChangeStart: _restoreBusy ? null : _beginDrag,
           onChangeEnd: _restoreBusy ? null : _endDrag,
