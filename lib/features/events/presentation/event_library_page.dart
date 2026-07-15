@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/soundtrack_theme.dart';
-import '../application/event_editor_controller.dart';
 import '../application/event_library_controller.dart';
 import '../application/event_transfer_controller.dart';
 import '../data/event_export_codec.dart';
@@ -9,7 +8,8 @@ import '../domain/audio_reference.dart';
 import '../domain/soundtrack_event.dart';
 import '../../../platform/documents/document_gateway.dart';
 import 'audio_relink_page.dart';
-import 'event_editor_page.dart';
+import 'event_flow_callbacks.dart';
+import 'event_overview_page.dart';
 import 'event_sort_order.dart';
 import 'widgets/event_list_row.dart';
 
@@ -18,11 +18,6 @@ const eventSortKey = Key('event-sort');
 const libraryMenuKey = Key('library-menu');
 const eventNameFieldKey = Key('event-name-field');
 
-typedef EventEditorControllerFactory =
-    EventEditorController Function(SoundTrackEvent event);
-typedef EventExportCallback = Future<bool> Function(SoundTrackEvent event);
-typedef EventImportCallback = Future<SoundTrackEvent?> Function();
-typedef EventLiveEntryPageBuilder = Widget Function(SoundTrackEvent event);
 const openAudioEngineLabKey = Key('open-audio-engine-lab');
 
 enum _LibraryMenuAction { importEvent, audioEngineLab }
@@ -55,7 +50,6 @@ class EventLibraryPage extends StatefulWidget {
 
 class _EventLibraryPageState extends State<EventLibraryPage> {
   bool _documentBusy = false;
-  bool _openingLive = false;
   EventSortOrder _sortOrder = EventSortOrder.newest;
 
   List<SoundTrackEvent> get _visibleEvents =>
@@ -269,34 +263,20 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     bool allowWhileDocumentBusy = false,
   }) async {
     if (_documentBusy && !allowWhileDocumentBusy) return;
-    final editorController = widget.createEditorController(event);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (context) => EventEditorPage(
-          controller: editorController,
+        builder: (context) => EventOverviewPage(
+          eventId: event.id,
+          libraryController: widget.controller,
+          createEditorController: widget.createEditorController,
           onSelectAudio: widget.onSelectAudio,
-          onStartLive: widget.buildLiveEntryPage == null ? null : _openLive,
+          onExport: widget.onExport,
+          buildLiveEntryPage: widget.buildLiveEntryPage,
         ),
       ),
     );
-    editorController.dispose();
     if (mounted) {
       await widget.controller.load();
-    }
-  }
-
-  Future<void> _openLive(SoundTrackEvent snapshot) async {
-    final builder = widget.buildLiveEntryPage;
-    if (builder == null || _openingLive) return;
-    _openingLive = true;
-    try {
-      await Navigator.of(
-        context,
-      ).push<void>(MaterialPageRoute(builder: (_) => builder(snapshot)));
-    } finally {
-      if (mounted) {
-        _openingLive = false;
-      }
     }
   }
 
