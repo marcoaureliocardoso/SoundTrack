@@ -117,6 +117,9 @@ e avisados sem alterar manualmente os volumes da sessão.
 ## Documentação
 
 - [`CHANGELOG.md`](CHANGELOG.md): histórico de versões e limitações conhecidas.
+- [`docs/design/soundtrack-visual-system.md`](docs/design/soundtrack-visual-system.md):
+  fonte canônica da linguagem visual, navegação, vocabulário, acessibilidade e
+  critérios de aceitação da interface.
 - [`docs/release/versioning.md`](docs/release/versioning.md): política de versão,
   build number e tags.
 - [`docs/release/android-signing.md`](docs/release/android-signing.md): assinatura

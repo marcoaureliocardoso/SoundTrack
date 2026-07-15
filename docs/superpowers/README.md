@@ -7,7 +7,7 @@ um estado posteriormente superado.
 
 Em caso de divergência, use nesta ordem:
 
-1. documentação atual em `docs/release/` e `docs/qa/`;
+1. documentação canônica atual em `docs/design/`, `docs/release/` e `docs/qa/`;
 2. especificação aprovada mais recente em `specs/`;
 3. planos em `plans/` apenas como histórico de implementação.
 
