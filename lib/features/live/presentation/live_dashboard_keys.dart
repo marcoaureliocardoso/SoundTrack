@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 const nowPlayingPanelKey = Key('now-playing-panel');
+const nowPlayingAccentKey = Key('now-playing-accent');
 const nowPlayingTrackKey = Key('now-playing-track');
 const nowPlayingDetailsKey = Key('now-playing-details');
 const liveDashboardScrollKey = Key('live-dashboard-scroll');

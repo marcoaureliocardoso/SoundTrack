@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/soundtrack_theme.dart';
 import '../../events/domain/event_moment.dart';
 import '../../events/domain/soundtrack_event.dart';
 import '../../playback/domain/playback_alert.dart';
@@ -226,24 +227,23 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
             slivers: [
               SliverToBoxAdapter(
                 child: Text(
-                  'MOMENTOS — TOQUE PARA INICIAR',
+                  'MOMENTOS',
                   key: momentsSectionTitleKey,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: SoundTrackTokens.sectionGap),
+              ),
               SliverList.builder(
                 itemCount: momentCount,
                 itemBuilder: (context, momentIndex) {
                   final moment = event.moments[momentIndex];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _LiveMomentItem(
-                      controller: widget.controller,
-                      number: momentIndex + 1,
-                      moment: moment,
-                      builder: widget.momentBuilder,
-                    ),
+                  return _LiveMomentItem(
+                    controller: widget.controller,
+                    number: momentIndex + 1,
+                    moment: moment,
+                    builder: widget.momentBuilder,
                   );
                 },
               ),
