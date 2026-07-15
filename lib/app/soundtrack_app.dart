@@ -10,6 +10,7 @@ import '../features/live/presentation/preflight_page.dart';
 import '../features/playback/domain/playback_snapshot.dart';
 import '../features/playback/presentation/audio_engine_lab_page.dart';
 import 'app_dependencies.dart';
+import 'theme/soundtrack_theme.dart';
 
 class SoundTrackApp extends StatefulWidget {
   const SoundTrackApp({required this.dependencies, super.key});
@@ -48,13 +49,7 @@ class _SoundTrackAppState extends State<SoundTrackApp> {
     return MaterialApp(
       title: 'SoundTrack',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0F766E),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: buildSoundTrackTheme(),
       routes: routes,
       home: FutureBuilder<SoundTrackEvent?>(
         future: _activeEvent,
