@@ -5,6 +5,7 @@ import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
 import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
+import 'package:soundtrack/features/events/presentation/moment_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
 import 'package:soundtrack/features/events/presentation/widgets/event_list_row.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
@@ -47,8 +48,9 @@ void main() {
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.text('Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();

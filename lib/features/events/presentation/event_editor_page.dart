@@ -6,7 +6,7 @@ import '../application/event_editor_controller.dart';
 import '../domain/audio_reference.dart';
 import '../domain/event_moment.dart';
 import '../domain/soundtrack_event.dart';
-import 'moment_editor_sheet.dart';
+import 'moment_editor_page.dart';
 import 'widgets/event_audio_settings_editor.dart';
 import 'widgets/moment_list_row.dart';
 
@@ -14,7 +14,6 @@ enum EventEditorInitialSection { top, audio }
 
 const addMomentKey = Key('add-moment');
 const eventAudioSectionKey = Key('event-audio-section');
-const momentNameFieldKey = Key('moment-name-field');
 Key momentTileKey(String id) => Key('moment-$id');
 
 class EventEditorPage extends StatefulWidget {
@@ -190,44 +189,27 @@ class _EventEditorPageState extends State<EventEditorPage> {
   }
 
   Future<void> _addMoment() async {
-    var draftName = '';
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Novo momento'),
-        content: TextFormField(
-          key: momentNameFieldKey,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nome'),
-          onChanged: (value) => draftName = value,
-          onFieldSubmitted: (value) => Navigator.pop(dialogContext, value),
+    final draft = widget.controller.createMomentDraft();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MomentEditorPage(
+          moment: draft,
+          onSave: widget.controller.insertMoment,
+          onSelectAudio: widget.onSelectAudio,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, draftName),
-            child: const Text('Adicionar'),
-          ),
-        ],
       ),
     );
-    if (name != null && name.trim().isNotEmpty) {
-      widget.controller.addMoment(name.trim());
-    }
   }
 
-  Future<void> _editMoment(EventMoment moment) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => MomentEditorSheet(
-        moment: moment,
-        onSelectAudio: widget.onSelectAudio,
-        onSave: widget.controller.updateMoment,
+  Future<void> _editMoment(EventMoment moment) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MomentEditorPage(
+          moment: moment,
+          onSelectAudio: widget.onSelectAudio,
+          onSave: widget.controller.updateMoment,
+          onDelete: () => widget.controller.removeMoment(moment.id),
+        ),
       ),
     );
   }

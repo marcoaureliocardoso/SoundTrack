@@ -7,6 +7,7 @@ import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
+import 'package:soundtrack/features/events/presentation/moment_editor_page.dart';
 
 import '../../../support/in_memory_event_repository.dart';
 import '../../../support/accessibility_test_harness.dart';
@@ -71,6 +72,36 @@ void main() {
     expect(find.byType(FloatingActionButton), findsNothing);
   });
 
+  testWidgets('adds a moment through the full screen editor', (tester) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: SoundTrackEvent.create(id: 'event-1', name: 'Formatura'),
+      newId: () => 'moment-1',
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+
+    await tester.tap(find.byKey(addMomentKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MomentEditorPage), findsOneWidget);
+    expect(find.byKey(deleteMomentKey), findsNothing);
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    final saveButton = find.descendant(
+      of: find.byType(MomentEditorPage),
+      matching: find.widgetWithText(TextButton, 'Salvar'),
+    );
+    expect(tester.widget<TextButton>(saveButton).onPressed, isNotNull);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MomentEditorPage), findsNothing);
+    expect(controller.draft.moments.single.name, 'Entrada');
+    expect(find.byType(EventEditorPage), findsOneWidget);
+  });
+
   testWidgets('adds and reorders moments', (tester) async {
     var nextId = 0;
     final controller = EventEditorController(
@@ -85,14 +116,16 @@ void main() {
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.widgetWithText(FilledButton, 'Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Brinde');
-    await tester.tap(find.widgetWithText(FilledButton, 'Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Brinde');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     expect(controller.draft.moments.map((moment) => moment.name), [
@@ -205,8 +238,9 @@ void main() {
     );
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.widgetWithText(FilledButton, 'Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
