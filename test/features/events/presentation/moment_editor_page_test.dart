@@ -157,7 +157,7 @@ void main() {
 
     await tester.tap(find.byKey(deleteMomentKey));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
     await tester.pumpAndSettle();
     expect(deletes, 1);
     expect(find.byType(MomentEditorPage), findsNothing);

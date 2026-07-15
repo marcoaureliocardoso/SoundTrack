@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/soundtrack_theme.dart';
+import '../../../app/widgets/editorial_components.dart';
 import '../application/event_transfer_controller.dart';
 import '../domain/event_moment.dart';
 import '../domain/soundtrack_event.dart';
@@ -29,75 +31,69 @@ class _AudioRelinkPageState extends State<AudioRelinkPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Localizar músicas')),
+      appBar: AppBar(title: const Text('Áudios pendentes')),
       body: _pending.isEmpty
           ? const Center(child: Text('Todas as músicas foram localizadas.'))
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(
+                SoundTrackTokens.pagePadding,
+                12,
+                SoundTrackTokens.pagePadding,
+                32,
+              ),
               children: [
                 const Text(
-                  'Escolha novamente os arquivos que não estão acessíveis.',
+                  'Os arquivos de áudio não acompanham o evento exportado. '
+                  'Selecione no dispositivo as músicas de cada momento.',
                 ),
                 if (_error != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
+                    padding: const EdgeInsets.only(top: 16),
+                    child: StatusIndicator.error(label: _error!),
                   ),
-                for (final moment in _pending) _pendingTile(moment),
+                const SizedBox(height: SoundTrackTokens.sectionGap),
+                for (var index = 0; index < _pending.length; index++) ...[
+                  _pendingRow(_pending[index]),
+                  if (index < _pending.length - 1) const Divider(height: 1),
+                ],
               ],
             ),
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: OutlinedButton(
+        minimum: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: TextButton(
           onPressed: _busyMomentId == null
               ? () => Navigator.of(context).pop(_event)
               : null,
-          child: Text(_pending.isEmpty ? 'Concluir' : 'Resolver depois'),
+          child: Text(
+            _pending.isEmpty ? 'Voltar ao evento' : 'Resolver depois',
+          ),
         ),
       ),
     );
   }
 
-  Widget _pendingTile(EventMoment moment) {
+  Widget _pendingRow(EventMoment moment) {
     final audio = moment.audio;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              audio?.displayName ?? 'Nenhuma música selecionada',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(moment.name),
-            if (audio?.artist != null) Text(audio!.artist!),
-            if (audio?.duration != null) Text(_duration(audio!.duration!)),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _busyMomentId == null
-                    ? () => _relink(moment.id)
-                    : null,
-                child: _busyMomentId == moment.id
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Escolher música'),
-              ),
-            ),
-          ],
-        ),
+    final metadata = [
+      'Momento: ${moment.name}',
+      if (audio?.artist != null) audio!.artist!,
+      if (audio?.duration != null) _duration(audio!.duration!),
+    ].join(' · ');
+    return EditorialRow(
+      leading: const Icon(
+        Icons.warning_amber_rounded,
+        color: SoundTrackTokens.warning,
+      ),
+      title: audio?.displayName ?? 'Nenhum arquivo selecionado',
+      subtitle: metadata,
+      trailing: TextButton(
+        onPressed: _busyMomentId == null ? () => _relink(moment.id) : null,
+        child: _busyMomentId == moment.id
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('Selecionar'),
       ),
     );
   }

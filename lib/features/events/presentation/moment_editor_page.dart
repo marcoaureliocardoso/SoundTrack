@@ -225,7 +225,10 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancelar'),
           ),
-          FilledButton(
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: SoundTrackTokens.destructive,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Excluir'),
           ),

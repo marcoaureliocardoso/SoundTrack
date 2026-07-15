@@ -337,14 +337,19 @@ class _EventOverviewPageState extends State<EventOverviewPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir evento?'),
         content: Text(
-          'Excluir “${event.name}”? Esta ação não pode ser desfeita.',
+          'O evento “${event.name}” será removido da biblioteca e sua '
+          'estrutura será removida. Os arquivos de áudio permanecem no '
+          'dispositivo.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancelar'),
           ),
-          FilledButton(
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: SoundTrackTokens.destructive,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Excluir'),
           ),

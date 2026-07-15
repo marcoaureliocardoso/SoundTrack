@@ -80,9 +80,11 @@ void main() {
     await _selectOverviewAction(tester, 'Excluir');
     expect(find.byType(EventOverviewPage), findsOneWidget);
     expect(find.text('Excluir evento?'), findsOneWidget);
+    expect(find.textContaining('“Jaleco”'), findsOneWidget);
+    expect(find.textContaining('estrutura será removida'), findsOneWidget);
     expect(await fixture.repository.findById(fixture.event.id), isNotNull);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Excluir'));
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
     await tester.pumpAndSettle();
 
     expect(find.byType(EventOverviewPage), findsNothing);

@@ -49,6 +49,134 @@ class EditorialSectionHeader extends StatelessWidget {
   }
 }
 
+class EditorialRow extends StatelessWidget {
+  const EditorialRow({
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+    this.onTap,
+    this.showChevron = false,
+    super.key,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveTrailing =
+        trailing ??
+        (showChevron
+            ? const Icon(Icons.chevron_right, color: SoundTrackTokens.accent)
+            : null);
+    return Semantics(
+      button: onTap != null,
+      enabled: onTap != null,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: SoundTrackTokens.rowMinHeight,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final scaler = MediaQuery.textScalerOf(context).scale(16) / 16;
+                final stacksTrailing =
+                    effectiveTrailing != null &&
+                    (scaler > 1.3 || constraints.maxWidth < 360);
+                final content = _EditorialRowContent(
+                  title: title,
+                  subtitle: subtitle,
+                  leading: leading,
+                );
+                if (stacksTrailing) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      content,
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: effectiveTrailing,
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: content),
+                    if (effectiveTrailing != null) ...[
+                      const SizedBox(width: 12),
+                      effectiveTrailing,
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditorialRowContent extends StatelessWidget {
+  const _EditorialRowContent({
+    required this.title,
+    required this.subtitle,
+    required this.leading,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (leading != null) ...[
+          Padding(padding: const EdgeInsets.only(top: 2), child: leading!),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: SoundTrackTokens.secondaryText,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 enum StatusSeverity { neutral, success, warning, error }
 
 class StatusIndicator extends StatelessWidget {

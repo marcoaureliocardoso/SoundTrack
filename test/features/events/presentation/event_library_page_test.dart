@@ -110,6 +110,64 @@ void main() {
     expect(_visibleEventNames(tester), ['Alfa', 'Zeta']);
   });
 
+  testWidgets('shows three editorial skeleton rows during the first load', (
+    tester,
+  ) async {
+    final releaseLoad = Completer<List<SoundTrackEvent>>();
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository(),
+      newId: () => 'event-1',
+      revalidateAudio: (_) => releaseLoad.future,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (var index = 0; index < 3; index++) {
+      expect(find.byKey(librarySkeletonRowKey(index)), findsOneWidget);
+    }
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    releaseLoad.complete(const []);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shows canonical first-load error and retries', (tester) async {
+    final repository = InMemoryEventRepository()
+      ..findAllError = StateError('storage unavailable');
+    final controller = EventLibraryController(
+      repository: repository,
+      newId: () => 'event-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Não foi possível carregar os eventos'), findsOneWidget);
+    expect(find.textContaining('armazenamento'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Tentar novamente'), findsOneWidget);
+
+    repository.findAllError = null;
+    await tester.tap(find.text('Tentar novamente'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nenhum evento ainda'), findsOneWidget);
+  });
+
   testWidgets('keeps empty message away from edges at 200 percent', (
     tester,
   ) async {
@@ -244,8 +302,8 @@ void main() {
     await tester.pumpAndSettle();
     await _tapImport(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Localizar músicas'), findsOneWidget);
-    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+    expect(find.text('Áudios pendentes'), findsOneWidget);
+    expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
   });
 
   testWidgets('running import disables global actions and ignores reentry', (

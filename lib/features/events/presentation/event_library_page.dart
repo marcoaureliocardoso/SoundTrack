@@ -20,6 +20,8 @@ const eventNameFieldKey = Key('event-name-field');
 
 const openAudioEngineLabKey = Key('open-audio-engine-lab');
 
+Key librarySkeletonRowKey(int index) => ValueKey('library-skeleton-$index');
+
 enum _LibraryMenuAction { importEvent, audioEngineLab }
 
 class EventLibraryPage extends StatefulWidget {
@@ -112,7 +114,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
           listenable: widget.controller,
           builder: (context, _) {
             if (widget.controller.loading && widget.controller.events.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const _LibrarySkeleton();
             }
             if (widget.controller.error != null &&
                 widget.controller.events.isEmpty) {
@@ -409,16 +411,83 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.all(SoundTrackTokens.pagePadding),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Não foi possível carregar os eventos',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Verifique o acesso ao armazenamento e tente novamente.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LibrarySkeleton extends StatelessWidget {
+  const _LibrarySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: .1);
+    return ExcludeSemantics(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          SoundTrackTokens.pagePadding,
+          28,
+          SoundTrackTokens.pagePadding,
+          32,
+        ),
         children: [
-          const Text('Não foi possível carregar seus eventos'),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: onRetry,
-            child: const Text('Tentar novamente'),
-          ),
+          for (var index = 0; index < 3; index++)
+            Padding(
+              key: librarySkeletonRowKey(index),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FractionallySizedBox(
+                          widthFactor: .62,
+                          child: Container(height: 16, color: color),
+                        ),
+                        const SizedBox(height: 10),
+                        FractionallySizedBox(
+                          widthFactor: .38,
+                          child: Container(height: 12, color: color),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
