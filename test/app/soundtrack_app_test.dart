@@ -95,7 +95,7 @@ void main() {
 
     expect(find.byType(PreflightPage), findsOneWidget);
     expect(playback.commands, isEmpty);
-    await tester.tap(find.text('Iniciar Modo Evento'));
+    await tester.tap(find.text('Entrar no Modo Evento'));
     await tester.pumpAndSettle();
 
     expect(find.byType(LiveDashboardPage), findsOneWidget);
