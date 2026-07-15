@@ -16,7 +16,7 @@ import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 import '../../../support/fake_live_playback_port.dart';
 
 void main() {
-  testWidgets('shows confirmed route and information-only now playing', (
+  testWidgets('shows confirmed route and compact now-playing details action', (
     tester,
   ) async {
     final harness = await _pumpDashboard(tester);
@@ -30,7 +30,7 @@ void main() {
           .getSemantics(find.byKey(nowPlayingPanelKey))
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
-      isFalse,
+      isTrue,
     );
     expect(
       tester
@@ -38,7 +38,7 @@ void main() {
           .getSemanticsData()
           .flagsCollection
           .isButton,
-      isFalse,
+      isTrue,
     );
 
     await harness.dispose(tester);
@@ -143,7 +143,10 @@ void main() {
 
     final releaseNarration = Completer<void>();
     harness.playback.onSetNarration = (_) => releaseNarration.future;
-    expect(find.text('Narração inativa'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração inativa',
+    );
     await tester.tap(find.byKey(narrationKey));
     await tester.tap(find.byKey(narrationKey));
     await tester.pump();
@@ -157,11 +160,12 @@ void main() {
         .value
         .copyWith(narrationActive: true);
     await tester.pump();
-    expect(find.text('Narração ativa'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(narrationKey)).getSemanticsData().label,
+      'Narração ativa',
+    );
 
     await _scrollToEmergencyVolumes(tester);
-    await tester.tap(find.byKey(emergencyVolumesKey));
-    await tester.pumpAndSettle();
     expect(find.byType(Slider), findsNWidgets(3));
     expect(find.textContaining('Master'), findsOneWidget);
     expect(find.textContaining('Música'), findsOneWidget);
@@ -267,8 +271,6 @@ void main() {
         Future<void>.error(StateError('volume rejected'));
 
     await _scrollToEmergencyVolumes(tester);
-    await tester.tap(find.byKey(emergencyVolumesKey));
-    await tester.pumpAndSettle();
     tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
     await tester.pump();
     await tester.pump();
@@ -290,16 +292,14 @@ void main() {
     harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
 
     await _scrollToEmergencyVolumes(tester);
-    await tester.tap(find.byKey(emergencyVolumesKey));
-    await tester.pumpAndSettle();
     tester.widgetList<Slider>(find.byType(Slider)).first.onChanged!(20);
     await tester.pump();
     expect(harness.playback.sessionVolumes, hasLength(1));
     final firstMaster = harness.playback.sessionVolumes.single.master;
 
-    await tester.tap(find.text('Volumes de emergência'));
+    await tester.tap(find.byKey(volumesToggleKey));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Volumes de emergência'));
+    await tester.tap(find.byKey(volumesToggleKey));
     await tester.pumpAndSettle();
     tester.widgetList<Slider>(find.byType(Slider)).elementAt(1).onChanged!(40);
     await tester.pump();
@@ -331,7 +331,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(harness.playback.stopCalls, 1);
 
-    await tester.tap(find.byKey(emergencyVolumesKey));
+    await tester.tap(find.byKey(volumesToggleKey));
     await tester.pumpAndSettle();
     final stopAfterLayoutChange = tester.widget<IconButton>(
       find.descendant(
@@ -365,8 +365,6 @@ void main() {
       harness.playback.onSetSessionVolumes = (_, _, _) => releaseFirst.future;
 
       await _scrollToEmergencyVolumes(tester);
-      await tester.tap(find.byKey(emergencyVolumesKey));
-      await tester.pumpAndSettle();
       final sliders = tester.widgetList<Slider>(find.byType(Slider)).toList();
       sliders[0].onChanged!(20);
       sliders[1].onChanged!(40);
@@ -411,8 +409,6 @@ void main() {
         Future<void>.error(StateError('restore rejected'));
 
     await _scrollToEmergencyVolumes(tester);
-    await tester.tap(find.byKey(emergencyVolumesKey));
-    await tester.pumpAndSettle();
     tester.widget<Slider>(find.byType(Slider).first).onChanged!(20);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Restaurar predefinições'));
@@ -739,21 +735,109 @@ void main() {
 
     expect(momentBuilds, greaterThan(0));
     expect(momentBuilds, lessThan(20));
-    await tester.scrollUntilVisible(
-      find.byKey(pausePlaybackKey),
-      600,
-      scrollable: _dashboardScrollable(),
-      maxScrolls: 100,
-    );
-    await tester.pumpAndSettle();
     expect(find.byKey(pausePlaybackKey), findsOneWidget);
-    expect(find.byKey(emergencyVolumesKey), findsOneWidget);
+    expect(find.byKey(volumesToggleKey), findsOneWidget);
     expect(tester.getTopLeft(find.byKey(pausePlaybackKey)).dy, lessThan(600));
-    expect(
-      tester.getTopLeft(find.byKey(emergencyVolumesKey)).dy,
-      lessThan(600),
-    );
+    expect(tester.getTopLeft(find.byKey(volumesToggleKey)).dy, lessThan(600));
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('only moments move between fixed live regions', (tester) async {
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _largeEvent(30),
+      playback: playback,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Alto-falante',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final nowBefore = tester.getRect(find.byKey(nowPlayingPanelKey));
+    final footerBefore = tester.getRect(find.byKey(playbackFooterKey));
+    final centerBefore = tester.getRect(find.byKey(liveDashboardCenterKey));
+    final scrollBefore = tester
+        .state<ScrollableState>(_dashboardScrollable())
+        .position
+        .pixels;
+
+    await tester.drag(_dashboardScrollable(), const Offset(0, -300));
+    await tester.pump();
+
+    expect(tester.getRect(find.byKey(nowPlayingPanelKey)), nowBefore);
+    expect(tester.getRect(find.byKey(playbackFooterKey)), footerBefore);
+    expect(centerBefore.top, greaterThanOrEqualTo(nowBefore.bottom));
+    expect(centerBefore.bottom, lessThanOrEqualTo(footerBefore.top));
+    final scrollAfter = tester
+        .state<ScrollableState>(_dashboardScrollable())
+        .position
+        .pixels;
+    expect(scrollAfter, greaterThan(scrollBefore));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('volume curtain preserves the moments scroll position', (
+    tester,
+  ) async {
+    final playback = FakeLivePlaybackPort();
+    final controller = LiveEventController(
+      event: _largeEvent(30),
+      playback: playback,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LiveDashboardPage(
+          controller: controller,
+          outputRouteLabel: 'Alto-falante',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.drag(_dashboardScrollable(), const Offset(0, -400));
+    await tester.pump();
+    final before = tester
+        .state<ScrollableState>(_dashboardScrollable())
+        .position
+        .pixels;
+
+    await tester.tap(find.byKey(volumesToggleKey));
+    await tester.pumpAndSettle();
+    expect(find.byKey(emergencyVolumesCurtainKey), findsOneWidget);
+    expect(find.byType(Slider), findsNWidgets(3));
+
+    await tester.tap(find.byKey(volumesToggleKey));
+    await tester.pumpAndSettle();
+    final after = tester
+        .state<ScrollableState>(_dashboardScrollable())
+        .position
+        .pixels;
+    expect(after, before);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('back closes volumes before asking to leave the event', (
+    tester,
+  ) async {
+    final harness = await _pumpDashboard(tester);
+    await tester.tap(find.byKey(volumesToggleKey));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(harness.controller.state.value.controlsExpanded, isFalse);
+    expect(find.text('Sair do Modo Evento?'), findsNothing);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Sair do Modo Evento?'), findsOneWidget);
+    await harness.dispose(tester);
   });
 }
 
@@ -763,12 +847,7 @@ Finder _dashboardScrollable() => find.descendant(
 );
 
 Future<void> _scrollToEmergencyVolumes(WidgetTester tester) async {
-  await tester.scrollUntilVisible(
-    find.byKey(emergencyVolumesKey),
-    400,
-    scrollable: _dashboardScrollable(),
-    maxScrolls: 40,
-  );
+  await tester.tap(find.byKey(volumesToggleKey));
   await tester.pumpAndSettle();
 }
 

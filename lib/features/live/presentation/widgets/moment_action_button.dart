@@ -30,6 +30,14 @@ class MomentActionButton extends StatelessWidget {
     final enabled = status == MomentStatus.ready && commandEnabled;
     final track = moment.audio?.displayName ?? 'Sem faixa vinculada';
     final colors = Theme.of(context).colorScheme;
+    final (backgroundColor, foregroundColor) = switch (status) {
+      MomentStatus.current => (
+        colors.primaryContainer,
+        colors.onPrimaryContainer,
+      ),
+      MomentStatus.ready when enabled => (colors.primary, colors.onPrimary),
+      _ => (colors.surfaceContainerHighest, colors.onSurfaceVariant),
+    };
 
     return Semantics(
       button: true,
@@ -42,18 +50,10 @@ class MomentActionButton extends StatelessWidget {
           style: FilledButton.styleFrom(
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            backgroundColor: status == MomentStatus.current
-                ? colors.primaryContainer
-                : null,
-            foregroundColor: status == MomentStatus.current
-                ? colors.onPrimaryContainer
-                : null,
-            disabledBackgroundColor: status == MomentStatus.current
-                ? colors.primaryContainer
-                : colors.surfaceContainerHighest,
-            disabledForegroundColor: status == MomentStatus.current
-                ? colors.onPrimaryContainer
-                : colors.onSurfaceVariant,
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            disabledBackgroundColor: backgroundColor,
+            disabledForegroundColor: foregroundColor,
           ),
           onPressed: enabled ? onPressed : null,
           child: Row(
@@ -63,7 +63,9 @@ class MomentActionButton extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 36),
                 child: Text(
                   '$number',
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: foregroundColor),
                 ),
               ),
               const SizedBox(width: 8),
@@ -73,15 +75,26 @@ class MomentActionButton extends StatelessWidget {
                   children: [
                     Text(
                       moment.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleMedium?.copyWith(color: foregroundColor),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(track, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      track,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: foregroundColor),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       statusText,
-                      style: Theme.of(context).textTheme.labelMedium,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: foregroundColor),
                     ),
                   ],
                 ),

@@ -67,14 +67,33 @@ No moto g54 5G, Android 15/API 35:
   paisagem nas seis telas críticas.
 - [x] Gate da versão `1.0.1+3` repetido: 388 testes e análise estática
   aprovados.
-- [x] Dashboard usa rolagem vertical e preserva pelo menos 16 px entre
-  “Tocando agora” e “Momentos”, sem sobreposição.
+- [x] Gate do Dashboard fixo executado: 405 testes Flutter, formatação, análise
+  estática e build do APK debug aprovados.
+- [x] Dashboard mantém “Tocando agora” fixo no topo e os quatro controles fixos
+  no rodapé; somente os momentos rolam no espaço central, com separação mínima
+  de 16 px e sem sobreposição.
+- [x] Cortina de volumes substitui os momentos no espaço central, preserva a
+  posição da lista e é fechada antes do diálogo de saída ao usar Voltar.
+- [x] Painéis compactos de reprodução e alerta permanecem legíveis em fonte a
+  200%; detalhes completos continuam acessíveis por toque e semântica.
+- [x] Ticker da faixa preserva o início do nome, pausa nas extremidades, retorna
+  suavemente e fica estático com redução de animações habilitada.
 - [x] Biblioteca, editores, religamento, pré-evento, controles e volumes foram
   exercitados com fonte a 200% sem overflow.
 - [x] APK debug normal inspecionado no emulador Android 15/API 35 com fonte a
   200% em retrato e paisagem; árvore de UI carregada e buffer de crashes vazio.
 - [x] Escala de fonte e orientação originais do emulador foram restauradas
   depois da inspeção.
+- [x] Dashboard fixo inspecionado no emulador Android 15/API 35 com um evento
+  de oito momentos, em 100% e 200%, retrato e paisagem: topo e rodapé mantiveram
+  exatamente os mesmos limites antes e depois da rolagem central.
+- [x] Cortina de volumes inspecionada nas duas orientações: Master, Música,
+  Narração e Restaurar permaneceram alcançáveis; Voltar fechou a cortina sem
+  abrir a confirmação de saída e a posição dos momentos foi preservada.
+- [x] Processo `br.com.marcocardoso.soundtrack` permaneceu ativo e o buffer de
+  crashes ficou vazio após o QA do Dashboard fixo.
+- [x] Ao final do QA do Dashboard fixo, fonte `1.0` e rotação automática `1`
+  foram confirmadas por ADB.
 - [x] APK debug compilado em `build/app/outputs/flutter-apk/app-debug.apk`.
 - [x] Testes Kotlin Android aprovados.
 - [x] Build release bloqueado sem keystore privado, sem fallback para chave

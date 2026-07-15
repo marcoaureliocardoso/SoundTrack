@@ -15,18 +15,14 @@ typedef _QueuedVolumes = ({_Volumes volumes, int generation});
 
 class EmergencyVolumePanel extends StatefulWidget {
   const EmergencyVolumePanel({
-    required this.expanded,
     required this.playback,
-    required this.onToggle,
     required this.onVolumesChanged,
     required this.onRestore,
     this.compact = false,
     super.key,
   });
 
-  final bool expanded;
   final PlaybackSnapshot playback;
-  final VoidCallback onToggle;
   final SessionVolumesChanged onVolumesChanged;
   final Future<void> Function() onRestore;
   final bool compact;
@@ -110,41 +106,23 @@ class _EmergencyVolumePanelState extends State<EmergencyVolumePanel> {
       ],
     );
     return Card(
+      key: emergencyVolumesKey,
       margin: widget.compact ? EdgeInsets.zero : null,
-      child: ExpansionTile(
-        key: emergencyVolumesKey,
-        initiallyExpanded: widget.expanded,
-        onExpansionChanged: (_) => widget.onToggle(),
-        tilePadding: EdgeInsets.symmetric(horizontal: widget.compact ? 8 : 16),
-        minTileHeight: widget.compact ? 48 : null,
-        dense: widget.compact,
-        title: const Text(
-          'Volumes de emergência',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: widget.compact
-            ? null
-            : const Text('Ajustes temporários desta sessão'),
-        childrenPadding: EdgeInsets.fromLTRB(
-          widget.compact ? 8 : 16,
-          0,
-          widget.compact ? 8 : 16,
-          widget.compact ? 4 : 16,
-        ),
-        children: [
-          if (widget.expanded)
-            controls
-          else
-            SizedBox(
-              height: widget.compact ? 104 : 260,
-              child: SingleChildScrollView(
-                primary: false,
-                padding: EdgeInsets.zero,
-                child: controls,
-              ),
+      child: SingleChildScrollView(
+        primary: false,
+        padding: EdgeInsets.all(widget.compact ? 8 : 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Volumes de emergência',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-        ],
+            if (!widget.compact) const Text('Ajustes temporários desta sessão'),
+            const SizedBox(height: 8),
+            controls,
+          ],
+        ),
       ),
     );
   }

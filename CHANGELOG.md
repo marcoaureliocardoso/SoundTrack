@@ -4,6 +4,39 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+### Changed
+
+- “Tocando agora” permanece fixo no topo do Dashboard e a barra com Pausar ou
+  Retomar, Parar, Narração e Volumes permanece fixa no rodapé; somente a lista
+  de momentos rola entre essas regiões.
+- Volumes de emergência agora surgem como uma cortina no espaço central e
+  preservam a posição da lista de momentos ao fechar.
+- Nomes longos da faixa atual percorrem uma única linha após uma pausa inicial,
+  retornam ao começo por transição suave e permanecem estáticos quando o
+  sistema solicita redução de animações.
+- Em telas compactas, “Tocando agora” e alertas mostram um resumo e permitem
+  abrir o conteúdo completo; o botão Voltar fecha a cortina de volumes antes
+  de solicitar a saída do evento.
+
+### Fixed
+
+- Cartões de momentos agora usam foreground uniforme e contraste WCAG AA em
+  número, nome, faixa e estado.
+- Controles inativos de transporte e Narração permanecem visualmente inativos,
+  mas legíveis no Dashboard escuro.
+- Dashboard permanece sem recorte ou sobreposição com fontes de 100% a 200%,
+  em viewports pequenos de retrato e paisagem, inclusive quando há alerta.
+
+### Validation
+
+- 405 testes Flutter, formatação e análise estática aprovados; APK debug
+  compilado com sucesso.
+- APK de QA instalado no emulador Android 15/API 35 com o certificado oficial;
+  Dashboard exercitado com oito momentos em 100% e 200%, retrato e paisagem.
+- Limites de “Tocando agora” e das quatro ações permaneceram idênticos antes e
+  depois da rolagem; cortina, Voltar, posição preservada, processo ativo e
+  buffer de crashes vazio foram confirmados.
+
 ## [1.0.1] - 2026-07-14
 
 ### Changed

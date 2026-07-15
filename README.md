@@ -17,8 +17,10 @@ versão estável. O APK assinado e seu checksum estão disponíveis na
 - Linha do tempo ordenável com música, loop ou parada, ganho e fades por
   momento.
 - Verificação pré-evento de músicas, bateria, volume e saída de áudio.
-- Dashboard ao vivo com “Tocando agora”, controles de transporte, Modo
-  Narração e volumes de emergência.
+- Dashboard ao vivo com “Tocando agora” fixo no topo, controles de transporte,
+  Narração e Volumes fixos no rodapé e rolagem exclusiva dos momentos.
+- Cortina de volumes de emergência no espaço central, sem perder a posição da
+  lista de momentos ao abrir ou fechar.
 - Fade entre momentos e preservação da faixa atual quando a próxima falha.
 - Continuidade do áudio ao alternar para outros aplicativos.
 - Persistência e restauração segura da sessão ativa.
@@ -26,6 +28,9 @@ versão estável. O APK assinado e seu checksum estão disponíveis na
 - Religamento manual de músicas indisponíveis após importação.
 - Layout responsivo a fontes Android ampliadas até 200%, com rolagem e sem
   sobreposição entre “Tocando agora”, momentos e controles.
+- Nome longo da faixa em execução com deslocamento horizontal pausado e
+  previsível; o movimento é desativado quando o sistema solicita redução de
+  animações.
 
 ## Limitações conhecidas
 
@@ -80,6 +85,10 @@ $env:SOUNDTRACK_ANDROID_DEVICE='<serial-ou-endereco-do-dispositivo>'
 
 O endereço de depuração Wi-Fi pode mudar. Consulte `flutter devices` antes de
 reutilizá-lo.
+
+No Modo Evento, o botão Voltar fecha primeiro a cortina de volumes, quando ela
+estiver aberta. Um novo Voltar então solicita confirmação antes de encerrar a
+sessão e interromper a reprodução.
 
 ## Build Android
 
