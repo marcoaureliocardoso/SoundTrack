@@ -69,13 +69,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Importar evento'));
     await tester.pumpAndSettle();
-    expect(find.text('Localizar músicas'), findsOneWidget);
-    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+    expect(find.text('Áudios pendentes'), findsOneWidget);
+    expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
 
-    await tester.tap(find.text('Escolher música'));
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
     expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
-    expect(find.text('Concluir'), findsOneWidget);
+    expect(find.text('Voltar ao evento'), findsOneWidget);
   });
 }
 

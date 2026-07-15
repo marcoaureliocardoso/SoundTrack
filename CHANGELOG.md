@@ -6,11 +6,16 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Changed
 
-- “Tocando agora” permanece fixo no topo do Dashboard e a barra com Pausar ou
-  Retomar, Parar, Narração e Volumes permanece fixa no rodapé; somente a lista
-  de momentos rola entre essas regiões.
-- Volumes de emergência agora surgem como uma cortina no espaço central e
-  preservam a posição da lista de momentos ao fechar.
+- A Biblioteca agora usa linhas editoriais, quatro ordenações e abre o contexto
+  do evento antes da edição ou preparação ao vivo.
+- Os fluxos de Evento, Editar estrutura, Editar momento e Verificação adotam o
+  vocabulário unificado (`Salvar`, `Selecionar`, `Áudios pendentes` e
+  `Voltar ao evento`) e hierarquia visual consistente.
+- “Tocando agora” permanece fixo no topo do Dashboard, com faixa lateral,
+  progresso e ticker; o dock segmentado de Pausar/Retomar, Parar e Narração
+  permanece fixo no rodapé.
+- O toggle persistente de Volumes de emergência abre uma cortina por trás do
+  dock, sem deslocar as regiões fixas nem perder a posição dos Momentos.
 - Nomes longos da faixa atual percorrem uma única linha após uma pausa inicial,
   retornam ao começo por transição suave e permanecem estáticos quando o
   sistema solicita redução de animações.
@@ -20,8 +25,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Fixed
 
-- Cartões de momentos agora usam foreground uniforme e contraste WCAG AA em
-  número, nome, faixa e estado.
+- Momentos ao vivo agora são linhas editoriais de toque integral, com faixa em
+  uma linha, estado textual e destaque semântico/visual para o momento atual.
 - Controles inativos de transporte e Narração permanecem visualmente inativos,
   mas legíveis no Dashboard escuro.
 - Dashboard permanece sem recorte ou sobreposição com fontes de 100% a 200%,
@@ -29,13 +34,11 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Validation
 
-- 405 testes Flutter, formatação e análise estática aprovados; APK debug
-  compilado com sucesso.
-- APK de QA instalado no emulador Android 15/API 35 com o certificado oficial;
-  Dashboard exercitado com oito momentos em 100% e 200%, retrato e paisagem.
-- Limites de “Tocando agora” e das quatro ações permaneceram idênticos antes e
-  depois da rolagem; cortina, Voltar, posição preservada, processo ativo e
-  buffer de crashes vazio foram confirmados.
+- 427 testes Flutter, formatação e análise estática aprovados.
+- Biblioteca, contexto, editores, religação, Verificação e Dashboard cobertos
+  por testes de widget de 100% a 200%, em retrato e paisagem.
+- Fluxos instrumentados de autoria/importação e Modo Evento aprovados no
+  emulador Android 15/API 35; buffer de crashes permaneceu vazio.
 
 ## [1.0.1] - 2026-07-14
 

@@ -13,19 +13,21 @@ versão estável. O APK assinado e seu checksum estão disponíveis na
 
 ## Funcionalidades
 
-- Catálogo local de eventos com criação, duplicação, edição e exclusão.
+- Biblioteca local de eventos com quatro ordenações, criação, duplicação,
+  renomeação, exportação e exclusão pelo contexto de cada evento.
 - Linha do tempo ordenável com música, loop ou parada, ganho e fades por
   momento.
 - Verificação pré-evento de músicas, bateria, volume e saída de áudio.
-- Dashboard ao vivo com “Tocando agora” fixo no topo, controles de transporte,
-  Narração e Volumes fixos no rodapé e rolagem exclusiva dos momentos.
+- Dashboard ao vivo com “Tocando agora” fixo no topo, dock segmentado de
+  Pausar/Retomar, Parar e Narração no rodapé e rolagem exclusiva dos momentos.
 - Cortina de volumes de emergência no espaço central, sem perder a posição da
   lista de momentos ao abrir ou fechar.
 - Fade entre momentos e preservação da faixa atual quando a próxima falha.
 - Continuidade do áudio ao alternar para outros aplicativos.
 - Persistência e restauração segura da sessão ativa.
 - Exportação e importação de eventos em JSON versionado.
-- Religamento manual de músicas indisponíveis após importação.
+- Religamento manual em “Áudios pendentes” após importação; os arquivos são
+  escolhidos novamente no dispositivo.
 - Layout responsivo a fontes Android ampliadas até 200%, com rolagem e sem
   sobreposição entre “Tocando agora”, momentos e controles.
 - Nome longo da faixa em execução com deslocamento horizontal pausado e
