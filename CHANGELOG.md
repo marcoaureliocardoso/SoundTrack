@@ -4,13 +4,21 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+### Added
+
+- A Biblioteca agora oferece quatro ordenações e abre o contexto do evento
+  antes da edição ou preparação ao vivo.
+- A Verificação mostra o horário relativo de sua última execução concluída.
+
 ### Changed
 
-- A Biblioteca agora usa linhas editoriais, quatro ordenações e abre o contexto
-  do evento antes da edição ou preparação ao vivo.
+- A Biblioteca e os Momentos ao vivo agora usam linhas editoriais de toque
+  integral, com faixa em uma linha, estado textual e destaque
+  semântico/visual para o momento atual.
 - Os fluxos de Evento, Editar estrutura, Editar momento e Verificação adotam o
   vocabulário unificado (`Salvar`, `Selecionar`, `Áudios pendentes` e
-  `Voltar ao evento`) e hierarquia visual consistente.
+  `Voltar ao evento`), incluindo `Disponibilizar Narração`, e hierarquia visual
+  consistente.
 - “Tocando agora” permanece fixo no topo do Dashboard, com faixa lateral,
   progresso e ticker; o dock segmentado de Pausar/Retomar, Parar e Narração
   permanece fixo no rodapé.
@@ -25,8 +33,6 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Fixed
 
-- Momentos ao vivo agora são linhas editoriais de toque integral, com faixa em
-  uma linha, estado textual e destaque semântico/visual para o momento atual.
 - Controles inativos de transporte e Narração permanecem visualmente inativos,
   mas legíveis no Dashboard escuro.
 - Dashboard permanece sem recorte ou sobreposição com fontes de 100% a 200%,
@@ -36,9 +42,7 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   cabeçalho e o dock mantém alvos de 48 dp.
 - Ao concluir a religação dos áudios de um evento importado, `Voltar ao evento`
   abre o contexto correto em vez de retornar à Biblioteca.
-- Papéis Material do tema agora usam integralmente a paleta verde-petróleo; o
-  editor usa `Disponibilizar Narração` e a Verificação mostra o horário relativo
-  de sua última execução concluída.
+- Papéis Material do tema agora usam integralmente a paleta verde-petróleo.
 
 ### Validation
 
