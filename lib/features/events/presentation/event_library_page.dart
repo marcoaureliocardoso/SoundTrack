@@ -296,7 +296,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       if (!mounted) return;
       final hasPending = imported.moments.any((moment) => moment.audioPending);
       if (hasPending && widget.transferController != null) {
-        await Navigator.of(context).push<void>(
+        final relinked = await Navigator.of(context).push<SoundTrackEvent>(
           MaterialPageRoute(
             builder: (_) => AudioRelinkPage(
               event: imported,
@@ -304,7 +304,16 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
             ),
           ),
         );
-        if (mounted) await widget.controller.load();
+        if (!mounted) return;
+        await widget.controller.load();
+        if (!mounted) return;
+        final resolved =
+            relinked != null &&
+            !relinked.moments.any((moment) => moment.audioPending);
+        if (resolved) {
+          _message('Evento importado');
+          await _open(relinked, allowWhileDocumentBusy: true);
+        }
       } else {
         _message('Evento importado');
         await _open(imported, allowWhileDocumentBusy: true);

@@ -55,6 +55,20 @@ void main() {
     );
   }
 
+  testWidgets('uses the approved narration vocabulary', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MomentEditorPage(moment: _momentWithLongAudio(), onSave: (_) {}),
+      ),
+    );
+
+    expect(find.text('Disponibilizar Narração'), findsOneWidget);
+    expect(
+      find.text('Mostra o botão Narração no Dashboard deste momento'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('saves a trimmed draft and returns once', (tester) async {
     EventMoment? saved;
     await _openEditor(

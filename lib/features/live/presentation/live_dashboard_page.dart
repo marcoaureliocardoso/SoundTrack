@@ -120,10 +120,13 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         appBar: AppBar(
           toolbarHeight: shortScreen ? 48 : null,
           title: shortScreen
-              ? Text(
-                  '${event.name} • Modo Evento',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ? ValueListenableBuilder<String>(
+                  valueListenable: _outputRouteLabel,
+                  builder: (context, label, _) => Text(
+                    '${event.name} • Modo Evento • $label',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,32 +142,34 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                     ),
                   ],
                 ),
-          bottom: PreferredSize(
-            preferredSize: Size.fromHeight(shortScreen ? 24 : 32),
-            child: SizedBox(
-              height: shortScreen ? 24 : 32,
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.speaker, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ValueListenableBuilder<String>(
-                        valueListenable: _outputRouteLabel,
-                        builder: (context, label, _) => Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+          bottom: shortScreen
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(32),
+                  child: SizedBox(
+                    height: 32,
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.speaker, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: _outputRouteLabel,
+                              builder: (context, label, _) => Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
         ),
         body: SafeArea(
           child: LayoutBuilder(

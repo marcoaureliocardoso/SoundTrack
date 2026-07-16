@@ -11,6 +11,7 @@ abstract final class SoundTrackTokens {
   static const onAccent = Color(0xFF092426);
   static const warning = Color(0xFFD0B66F);
   static const destructive = Color(0xFFCC9DA4);
+  static const destructiveContainer = Color(0xFF3A2328);
 
   static const pagePadding = 16.0;
   static const sectionGap = 20.0;
@@ -22,10 +23,29 @@ ThemeData buildSoundTrackTheme() {
   const scheme = ColorScheme.dark(
     primary: SoundTrackTokens.accent,
     onPrimary: SoundTrackTokens.onAccent,
+    primaryContainer: SoundTrackTokens.elevatedSurface,
+    onPrimaryContainer: SoundTrackTokens.primaryText,
+    secondary: SoundTrackTokens.accent,
+    onSecondary: SoundTrackTokens.onAccent,
+    secondaryContainer: SoundTrackTokens.elevatedSurface,
+    onSecondaryContainer: SoundTrackTokens.primaryText,
     surface: SoundTrackTokens.surface,
     onSurface: SoundTrackTokens.primaryText,
+    surfaceDim: SoundTrackTokens.background,
+    surfaceBright: SoundTrackTokens.elevatedSurface,
+    surfaceContainerLowest: SoundTrackTokens.background,
+    surfaceContainerLow: SoundTrackTokens.surface,
+    surfaceContainer: SoundTrackTokens.surface,
+    surfaceContainerHigh: SoundTrackTokens.elevatedSurface,
+    surfaceContainerHighest: SoundTrackTokens.border,
+    onSurfaceVariant: SoundTrackTokens.secondaryText,
+    outline: SoundTrackTokens.secondaryText,
+    outlineVariant: SoundTrackTokens.border,
     error: SoundTrackTokens.destructive,
     onError: SoundTrackTokens.background,
+    errorContainer: SoundTrackTokens.destructiveContainer,
+    onErrorContainer: SoundTrackTokens.primaryText,
+    surfaceTint: SoundTrackTokens.accent,
   );
   return ThemeData(
     brightness: Brightness.dark,

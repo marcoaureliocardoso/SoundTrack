@@ -111,9 +111,9 @@ class _MomentEditorPageState extends State<MomentEditorPage> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Narração'),
+            title: const Text('Disponibilizar Narração'),
             subtitle: const Text(
-              'Permite reduzir a música enquanto houver uma fala',
+              'Mostra o botão Narração no Dashboard deste momento',
             ),
             value: _draft.narrationEnabled,
             onChanged: (value) {

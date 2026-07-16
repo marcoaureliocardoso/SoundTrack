@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/soundtrack_theme.dart';
@@ -38,11 +40,19 @@ class _PreflightPageState extends State<PreflightPage> {
   var _checking = false;
   var _entering = false;
   var _generation = 0;
+  DateTime? _checkedAt;
+  Timer? _relativeTimeTimer;
 
   @override
   void initState() {
     super.initState();
     _check();
+  }
+
+  @override
+  void dispose() {
+    _relativeTimeTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -63,6 +73,15 @@ class _PreflightPageState extends State<PreflightPage> {
               context,
             ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
+          if (_checkedAt case final checkedAt?) ...[
+            const SizedBox(height: 4),
+            Text(
+              _relativeVerificationTime(checkedAt, DateTime.now()),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: SoundTrackTokens.secondaryText,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             'Confira músicas, sistema e saída antes de entrar no Modo Evento.',
@@ -184,8 +203,10 @@ class _PreflightPageState extends State<PreflightPage> {
       if (!mounted || generation != _generation) return;
       setState(() {
         _result = result;
+        _checkedAt = DateTime.now();
         _checking = false;
       });
+      _startRelativeTimeUpdates();
     } catch (error) {
       if (!mounted || generation != _generation) return;
       setState(() {
@@ -194,6 +215,13 @@ class _PreflightPageState extends State<PreflightPage> {
         _checking = false;
       });
     }
+  }
+
+  void _startRelativeTimeUpdates() {
+    _relativeTimeTimer?.cancel();
+    _relativeTimeTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _enter() async {
@@ -248,6 +276,21 @@ class _PreflightPageState extends State<PreflightPage> {
       }
     }
   }
+}
+
+String _relativeVerificationTime(DateTime checkedAt, DateTime now) {
+  final elapsed = now.difference(checkedAt);
+  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'Verificado agora';
+  if (elapsed.inMinutes < 60) {
+    final minutes = elapsed.inMinutes;
+    return 'Verificado há $minutes min';
+  }
+  if (elapsed.inHours < 24) {
+    final hours = elapsed.inHours;
+    return 'Verificado há $hours ${hours == 1 ? 'hora' : 'horas'}';
+  }
+  final days = elapsed.inDays;
+  return 'Verificado há $days ${days == 1 ? 'dia' : 'dias'}';
 }
 
 class _MetricStrip extends StatelessWidget {

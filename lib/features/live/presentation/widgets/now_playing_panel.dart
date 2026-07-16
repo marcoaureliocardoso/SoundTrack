@@ -74,10 +74,10 @@ class NowPlayingPanel extends StatelessWidget {
             onTap: compact ? showTrackDetails : null,
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                compact ? 10 : 16,
                 compact ? 8 : 16,
-                compact ? 10 : 16,
-                compact ? 8 : 14,
+                compact ? 4 : 16,
+                compact ? 8 : 16,
+                compact ? 4 : 14,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,36 +96,39 @@ class NowPlayingPanel extends StatelessWidget {
                   Text(
                     moment,
                     style: compact
-                        ? Theme.of(context).textTheme.titleMedium
+                        ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          )
                         : Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     maxLines: compact ? 1 : null,
                     overflow: compact ? TextOverflow.ellipsis : null,
                   ),
-                  if (!compact) ...[
-                    const SizedBox(height: 4),
-                    TrackNameTicker(
-                      key: nowPlayingTrackKey,
-                      text: track,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    if (state.currentAudioArtist case final artist?)
-                      Text(
-                        artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: SoundTrackTokens.secondaryText,
-                        ),
+                  SizedBox(height: compact ? 2 : 4),
+                  TrackNameTicker(
+                    key: nowPlayingTrackKey,
+                    text: track,
+                    style: compact
+                        ? Theme.of(context).textTheme.bodySmall
+                        : Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (!compact && state.currentAudioArtist != null)
+                    Text(
+                      state.currentAudioArtist!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: SoundTrackTokens.secondaryText,
                       ),
-                  ],
+                    ),
                   SizedBox(height: compact ? 2 : 12),
                   if (compact)
                     Text(
                       '$status · $time',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
                     )
                   else
                     Wrap(
@@ -133,14 +136,12 @@ class NowPlayingPanel extends StatelessWidget {
                       runSpacing: 4,
                       children: [Text(status), Text(time)],
                     ),
-                  if (!compact) ...[
-                    const SizedBox(height: 12),
-                    LinearProgressIndicator(
-                      value: progress ?? 0,
-                      minHeight: 3,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
+                  SizedBox(height: compact ? 4 : 12),
+                  LinearProgressIndicator(
+                    value: progress ?? 0,
+                    minHeight: compact ? 2 : 3,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ],
               ),
             ),

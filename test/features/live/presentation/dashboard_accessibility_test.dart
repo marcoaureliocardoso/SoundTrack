@@ -8,6 +8,7 @@ import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/live/application/live_event_controller.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
 import 'package:soundtrack/features/live/presentation/widgets/live_alert_banner.dart';
+import 'package:soundtrack/features/live/presentation/widgets/track_name_ticker.dart';
 import 'package:soundtrack/features/playback/domain/playback_alert.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
@@ -51,6 +52,15 @@ void main() {
         expect(centerBefore.top, greaterThanOrEqualTo(nowBefore.bottom));
         expect(centerBefore.bottom, lessThanOrEqualTo(footerBefore.top));
         expect(momentsTitle.top - nowBefore.bottom, greaterThanOrEqualTo(16));
+        expect(find.byKey(nowPlayingTrackKey), findsOneWidget);
+        expect(find.byType(TrackNameTicker), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(nowPlayingPanelKey),
+            matching: find.byType(LinearProgressIndicator),
+          ),
+          findsOneWidget,
+        );
 
         for (final key in [
           pausePlaybackKey,

@@ -59,6 +59,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 icon: paused ? Icons.play_arrow : Icons.pause,
                 label: paused ? 'Retomar' : 'Pausar',
                 showLabel: !widget.compact,
+                minHeight: widget.compact ? SoundTrackTokens.targetMinSize : 64,
                 foreground: hasCurrent ? colors.onSurface : inactiveForeground,
                 background: colors.surfaceContainerHigh,
                 onPressed: hasCurrent && !_transportBusy
@@ -75,6 +76,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 icon: Icons.stop,
                 label: 'Parar',
                 showLabel: !widget.compact,
+                minHeight: widget.compact ? SoundTrackTokens.targetMinSize : 64,
                 foreground: hasCurrent
                     ? SoundTrackTokens.destructive
                     : inactiveForeground,
@@ -91,6 +93,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 icon: Icons.mic,
                 label: narrationLabel,
                 showLabel: !widget.compact,
+                minHeight: widget.compact ? SoundTrackTokens.targetMinSize : 64,
                 toggled: playback.narrationActive,
                 foreground: narrationEnabled || playback.narrationActive
                     ? colors.primary
@@ -160,6 +163,7 @@ class _DockControl extends StatelessWidget {
     required this.onPressed,
     required this.foreground,
     required this.showLabel,
+    required this.minHeight,
     this.background = Colors.transparent,
     this.borderColor,
     this.toggled,
@@ -171,6 +175,7 @@ class _DockControl extends StatelessWidget {
   final VoidCallback? onPressed;
   final Color foreground;
   final bool showLabel;
+  final double minHeight;
   final Color background;
   final Color? borderColor;
   final bool? toggled;
@@ -190,9 +195,9 @@ class _DockControl extends StatelessWidget {
           key: controlKey,
           onTap: onPressed,
           child: Container(
-            constraints: const BoxConstraints(
+            constraints: BoxConstraints(
               minWidth: SoundTrackTokens.targetMinSize,
-              minHeight: 64,
+              minHeight: minHeight,
             ),
             decoration: borderColor == null
                 ? null

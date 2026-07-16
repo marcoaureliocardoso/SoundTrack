@@ -31,10 +31,18 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   mas legíveis no Dashboard escuro.
 - Dashboard permanece sem recorte ou sobreposição com fontes de 100% a 200%,
   em viewports pequenos de retrato e paisagem, inclusive quando há alerta.
+- O painel compacto de “Tocando agora” preserva momento, faixa com ticker,
+  estado, tempo e progresso; em paisagem curta, a saída de áudio migra para o
+  cabeçalho e o dock mantém alvos de 48 dp.
+- Ao concluir a religação dos áudios de um evento importado, `Voltar ao evento`
+  abre o contexto correto em vez de retornar à Biblioteca.
+- Papéis Material do tema agora usam integralmente a paleta verde-petróleo; o
+  editor usa `Disponibilizar Narração` e a Verificação mostra o horário relativo
+  de sua última execução concluída.
 
 ### Validation
 
-- 427 testes Flutter, formatação e análise estática aprovados.
+- 429 testes Flutter, formatação e análise estática aprovados.
 - Biblioteca, contexto, editores, religação, Verificação e Dashboard cobertos
   por testes de widget de 100% a 200%, em retrato e paisagem.
 - Fluxos instrumentados de autoria/importação e Modo Evento aprovados no

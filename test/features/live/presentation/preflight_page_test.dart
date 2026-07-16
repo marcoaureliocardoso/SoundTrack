@@ -87,6 +87,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Formatura'), findsOneWidget);
+    expect(find.text('Verificado agora'), findsOneWidget);
     expect(find.text('0/1'), findsOneWidget);
     expect(find.text('ERROS'), findsWidgets);
     expect(find.text('AVISOS'), findsWidgets);

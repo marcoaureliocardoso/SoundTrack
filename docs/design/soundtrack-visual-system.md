@@ -1,7 +1,7 @@
 # Refinamento visual amplo do SoundTrack
 
 - **Data:** 15 de julho de 2026
-- **Status:** design aprovado; implementação ainda não iniciada
+- **Status:** implementado e validado; documento em manutenção contínua
 - **Escopo:** fluxo principal do aplicativo Android, exceto o laboratório técnico de áudio
 - **Natureza:** documento canônico e permanente do sistema visual; deve ser atualizado quando a interface aprovada mudar
 
@@ -368,3 +368,22 @@ O refinamento estará concluído quando:
 6. Testes de acessibilidade, integração no emulador e documentação.
 
 Essa ordem reduz risco porque estabiliza primeiro os componentes reutilizados e deixa o Dashboard — a tela mais sensível operacionalmente — para depois de os padrões estarem testados.
+
+## 13. Registro da implementação
+
+O sistema visual foi implementado no fluxo principal Android em 15 de julho de
+2026. A entrega inclui os tokens verde-petróleo aplicados aos papéis Material 3,
+componentes editoriais, telas de Biblioteca e Evento, editores, Verificação e
+Dashboard ao vivo. O laboratório técnico permaneceu fora do refinamento.
+
+A revisão final confirmou também:
+
+- `Tocando agora` preserva momento, faixa, estado, tempo e progresso em 100%,
+  150% e 200%, inclusive em paisagem compacta;
+- concluir a religação de todos os áudios importados retorna ao contexto do
+  evento correspondente;
+- `Disponibilizar Narração`, horário relativo da Verificação e papéis do tema
+  seguem o vocabulário e a paleta deste documento;
+- formatação, análise estática e 429 testes Flutter foram aprovados;
+- os fluxos instrumentados de autoria/importação e Modo Evento foram aprovados
+  no emulador Android 15/API 35.

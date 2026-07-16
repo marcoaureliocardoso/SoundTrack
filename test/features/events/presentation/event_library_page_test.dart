@@ -10,6 +10,7 @@ import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
+import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
 import 'package:soundtrack/features/events/presentation/widgets/event_list_row.dart';
 import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
@@ -306,6 +307,64 @@ void main() {
     expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
   });
 
+  testWidgets('returns to imported event after resolving every audio', (
+    tester,
+  ) async {
+    final imported = SoundTrackEvent(
+      id: 'imported',
+      name: 'Cerimônia importada',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      audioSettings: const EventAudioSettings.defaults(),
+      moments: [
+        EventMoment.create(id: 'moment', position: 0, name: 'Abertura'),
+      ],
+    );
+    final repository = InMemoryEventRepository([imported]);
+    final controller = EventLibraryController(
+      repository: repository,
+      newId: () => 'event-1',
+    );
+    final transfer = EventTransferController(
+      gateway: _Gateway(
+        pickedAudio: const PickedDocument(
+          uri: 'content://abertura',
+          displayName: 'abertura.mp3',
+        ),
+      ),
+      codec: const EventExportCodec(),
+      repository: repository,
+      newId: () => 'event-2',
+      clock: DateTime.now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (event) => EventEditorController(
+            repository: repository,
+            initial: event,
+            newId: () => 'moment-new',
+          ),
+          onImport: () async => imported,
+          transferController: transfer,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _tapImport(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Selecionar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Voltar ao evento'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EventOverviewPage), findsOneWidget);
+    expect(find.byKey(editEventStructureKey), findsOneWidget);
+    expect(find.text('Cerimônia importada'), findsOneWidget);
+  });
+
   testWidgets('running import disables global actions and ignores reentry', (
     tester,
   ) async {
@@ -428,6 +487,10 @@ void main() {
 }
 
 class _Gateway implements DocumentGateway {
+  const _Gateway({this.pickedAudio});
+
+  final PickedDocument? pickedAudio;
+
   @override
   Future<bool> canRead(String uri) async => true;
   @override
@@ -438,7 +501,7 @@ class _Gateway implements DocumentGateway {
   @override
   Future<String?> openEventJson() async => null;
   @override
-  Future<PickedDocument?> pickAudio() async => null;
+  Future<PickedDocument?> pickAudio() async => pickedAudio;
   @override
   Future<AudioProbeResult> probeAudio(String uri) async =>
       const AudioProbeResult(playable: true);

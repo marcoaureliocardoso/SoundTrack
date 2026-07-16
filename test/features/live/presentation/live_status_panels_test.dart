@@ -79,7 +79,9 @@ void main() {
       _panel(state: _state(track: longTrack), compact: true),
     );
 
-    expect(find.byType(TrackNameTicker), findsNothing);
+    expect(find.byType(TrackNameTicker), findsOneWidget);
+    expect(find.byKey(nowPlayingTrackKey), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('Entrada dos formandos'), findsOneWidget);
     expect(find.text('Reproduzindo · 0:12 / 3:00'), findsOneWidget);
 
@@ -87,7 +89,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(nowPlayingDetailsKey), findsOneWidget);
-    expect(find.text(longTrack), findsOneWidget);
+    expect(find.text(longTrack), findsWidgets);
   });
 
   testWidgets('compact alert keeps details and dismiss as separate actions', (

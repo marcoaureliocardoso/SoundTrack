@@ -12,6 +12,18 @@ void main() {
     expect(theme.scaffoldBackgroundColor, const Color(0xFF091315));
     expect(theme.colorScheme.primary, const Color(0xFF73D2C7));
     expect(theme.colorScheme.surface, const Color(0xFF111F21));
+    expect(
+      theme.colorScheme.surfaceContainerLowest,
+      SoundTrackTokens.background,
+    );
+    expect(theme.colorScheme.surfaceContainerLow, SoundTrackTokens.surface);
+    expect(theme.colorScheme.surfaceContainer, SoundTrackTokens.surface);
+    expect(
+      theme.colorScheme.surfaceContainerHigh,
+      SoundTrackTokens.elevatedSurface,
+    );
+    expect(theme.colorScheme.onSurfaceVariant, SoundTrackTokens.secondaryText);
+    expect(theme.colorScheme.outlineVariant, SoundTrackTokens.border);
     expect(theme.dividerColor, const Color(0xFF263638));
     expect(
       contrastRatio(theme.colorScheme.onSurface, theme.scaffoldBackgroundColor),
