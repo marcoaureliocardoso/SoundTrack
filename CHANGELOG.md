@@ -4,6 +4,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-16
+
 ### Added
 
 - A Biblioteca agora oferece quatro ordenações e abre o contexto do evento
@@ -12,6 +14,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
 
 ### Changed
 
+- Versão Android atualizada para `1.1.0+4`, preservando o crescimento do
+  `versionCode` após os artefatos já distribuídos.
 - A Biblioteca e os Momentos ao vivo agora usam linhas editoriais de toque
   integral, com faixa em uma linha, estado textual e destaque
   semântico/visual para o momento atual.
@@ -51,6 +55,8 @@ Todas as mudanças relevantes deste projeto serão documentadas neste arquivo.
   por testes de widget de 100% a 200%, em retrato e paisagem.
 - Fluxos instrumentados de autoria/importação e Modo Evento aprovados no
   emulador Android 15/API 35; buffer de crashes permaneceu vazio.
+- APK `1.1.0 (4)` assinado com o certificado oficial, instalado e iniciado no
+  emulador Android 15/API 35; Biblioteca e buffer de crashes vazio confirmados.
 
 ## [1.0.1] - 2026-07-14
 

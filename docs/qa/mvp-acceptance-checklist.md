@@ -1,6 +1,6 @@
 # Checklist de aceitação do MVP SoundTrack
 
-Atualizado em 14 de julho de 2026.
+Atualizado em 16 de julho de 2026.
 
 ## Escopo das rodadas
 
@@ -67,6 +67,10 @@ No moto g54 5G, Android 15/API 35:
   paisagem nas seis telas críticas.
 - [x] Gate da versão `1.0.1+3` repetido: 388 testes e análise estática
   aprovados.
+- [x] Gate da versão `1.1.0+4` executado: formatação, análise estática, 429
+  testes Flutter e testes Kotlin Android aprovados.
+- [x] Fluxos instrumentados de autoria/importação, motor de áudio e Modo Evento
+  aprovados no emulador Android 15/API 35.
 - [x] Gate do Dashboard fixo executado: 405 testes Flutter, formatação, análise
   estática e build do APK debug aprovados.
 - [x] Dashboard mantém “Tocando agora” fixo no topo e os quatro controles fixos
@@ -101,10 +105,13 @@ No moto g54 5G, Android 15/API 35:
 - [x] APK release `1.0.1+3` assinado com o certificado oficial, instalado e
   iniciado no emulador Android 15/API 35; tela “Meus Eventos” e buffer de
   crashes vazio confirmados.
+- [x] APK release `1.1.0+4` assinado com o mesmo certificado oficial do release
+  anterior, verificado com APK Signature Scheme v2, instalado e iniciado no
+  emulador Android 15/API 35; Biblioteca e buffer de crashes vazio confirmados.
 
 ## Aceitação física manual adiada
 
-Os itens abaixo não bloqueiam a publicação da correção `1.0.1`, mas continuam
+Os itens abaixo não bloqueiam a publicação da versão `1.1.0`, mas continuam
 pendentes antes de uma decisão de uso em campo:
 
 - [ ] ADIADO — evento manual com pelo menos 20 momentos.
