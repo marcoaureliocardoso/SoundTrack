@@ -48,9 +48,15 @@ void main() {
         );
 
         expect(tester.takeException(), isNull);
-        await tester.drag(find.byType(ListView), const Offset(0, -400));
-        await tester.pumpAndSettle();
-        expect(find.text('Escolher música'), findsOneWidget);
+        expect(find.text('Áudios pendentes'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Selecionar'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Selecionar'), findsOneWidget);
+        expect(find.text('Localizar músicas'), findsNothing);
+        expect(find.text('Escolher música'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -72,14 +78,18 @@ void main() {
       ),
     );
     expect(find.text('missing.mp3'), findsOneWidget);
-    expect(find.text('Old artist'), findsOneWidget);
-    expect(find.text('Escolher música'), findsOneWidget);
+    expect(find.textContaining('Old artist'), findsOneWidget);
+    expect(find.text('Áudios pendentes'), findsOneWidget);
+    expect(find.text('Selecionar'), findsOneWidget);
     expect(find.text('Resolver depois'), findsOneWidget);
+    expect(find.text('Localizar músicas'), findsNothing);
+    expect(find.text('Escolher música'), findsNothing);
 
-    await tester.tap(find.text('Escolher música'));
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
     expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
-    expect(find.text('Concluir'), findsOneWidget);
+    expect(find.text('Voltar ao evento'), findsOneWidget);
+    expect(find.text('Concluir'), findsNothing);
   });
 
   testWidgets('lists and relinks a moment with no audio reference', (
@@ -99,10 +109,10 @@ void main() {
         home: AudioRelinkPage(event: event, controller: controller),
       ),
     );
-    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
-    expect(find.text('Opening'), findsOneWidget);
+    expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
+    expect(find.text('Momento: Opening'), findsOneWidget);
 
-    await tester.tap(find.text('Escolher música'));
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
     expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
     expect((await repository.findById('e'))!.moments.single.audio!.uri, 'new');
@@ -126,7 +136,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Escolher música'));
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
     expect(
       find.text(

@@ -10,7 +10,8 @@ import 'package:soundtrack/features/events/domain/event_audio_settings.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
-import 'package:soundtrack/features/events/presentation/widgets/event_card.dart';
+import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
+import 'package:soundtrack/features/events/presentation/widgets/event_list_row.dart';
 import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
@@ -45,11 +46,128 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byKey(addEventKey), findsOneWidget);
-        expect(find.text('Importar'), findsOneWidget);
+        expect(find.byKey(eventSortKey), findsOneWidget);
+        expect(find.byKey(libraryMenuKey), findsOneWidget);
+        expect(find.text('Importar evento'), findsNothing);
+        for (final row in tester.widgetList<EventListRow>(
+          find.byType(EventListRow),
+        )) {
+          expect(
+            tester.getSize(find.byWidget(row)).height,
+            greaterThanOrEqualTo(64),
+          );
+        }
         expect(tester.takeException(), isNull);
       },
     );
   }
+
+  testWidgets('shows approved library chrome and sorts visible events', (
+    tester,
+  ) async {
+    final alfa = SoundTrackEvent.create(
+      id: 'alfa',
+      name: 'Alfa',
+    ).copyWith(updatedAt: DateTime.utc(2026, 7, 14));
+    final zeta = SoundTrackEvent.create(
+      id: 'zeta',
+      name: 'Zeta',
+    ).copyWith(updatedAt: DateTime.utc(2026, 7, 15));
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository([alfa, zeta]),
+      newId: () => 'novo',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+          onImport: () async => null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Eventos'), findsOneWidget);
+    expect(find.text('Sua biblioteca SoundTrack'), findsNothing);
+    expect(find.byKey(addEventKey), findsOneWidget);
+    expect(find.byKey(eventSortKey), findsOneWidget);
+    expect(find.byKey(libraryMenuKey), findsOneWidget);
+    expect(find.text('Importar evento'), findsNothing);
+    expect(_visibleEventNames(tester), ['Zeta', 'Alfa']);
+
+    await tester.tap(find.byKey(libraryMenuKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Importar evento'), findsOneWidget);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(eventSortKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nome: A–Z'));
+    await tester.pumpAndSettle();
+
+    expect(_visibleEventNames(tester), ['Alfa', 'Zeta']);
+  });
+
+  testWidgets('shows three editorial skeleton rows during the first load', (
+    tester,
+  ) async {
+    final releaseLoad = Completer<List<SoundTrackEvent>>();
+    final controller = EventLibraryController(
+      repository: InMemoryEventRepository(),
+      newId: () => 'event-1',
+      revalidateAudio: (_) => releaseLoad.future,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    for (var index = 0; index < 3; index++) {
+      expect(find.byKey(librarySkeletonRowKey(index)), findsOneWidget);
+    }
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    releaseLoad.complete(const []);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shows canonical first-load error and retries', (tester) async {
+    final repository = InMemoryEventRepository()
+      ..findAllError = StateError('storage unavailable');
+    final controller = EventLibraryController(
+      repository: repository,
+      newId: () => 'event-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventLibraryPage(
+          controller: controller,
+          createEditorController: (_) => throw UnimplementedError(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Não foi possível carregar os eventos'), findsOneWidget);
+    expect(find.textContaining('armazenamento'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Tentar novamente'), findsOneWidget);
+
+    repository.findAllError = null;
+    await tester.tap(find.text('Tentar novamente'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nenhum evento ainda'), findsOneWidget);
+  });
 
   testWidgets('keeps empty message away from edges at 200 percent', (
     tester,
@@ -69,9 +187,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final message = tester.getRect(
-      find.text('Nenhum evento. Crie o primeiro para começar.'),
-    );
+    final message = tester.getRect(find.text('Nenhum evento ainda'));
     expect(message.left, greaterThanOrEqualTo(16));
     expect(message.right, lessThanOrEqualTo(304));
   });
@@ -98,7 +214,7 @@ void main() {
     await tester.tap(find.text('Criar'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(EventCard), findsOneWidget);
+    expect(find.byType(EventListRow), findsOneWidget);
     expect(find.text('Formatura'), findsOneWidget);
   });
 
@@ -148,7 +264,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Importar'));
+    await _tapImport(tester);
     await tester.pumpAndSettle();
     expect(find.text('Importação cancelada'), findsOneWidget);
   });
@@ -185,56 +301,71 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Importar'));
+    await _tapImport(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Localizar músicas'), findsOneWidget);
-    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+    expect(find.text('Áudios pendentes'), findsOneWidget);
+    expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
   });
 
-  testWidgets('document operation blocks import and export reentry', (
+  testWidgets('returns to imported event after resolving every audio', (
     tester,
   ) async {
-    final repository = InMemoryEventRepository([
-      SoundTrackEvent.create(id: 'event-1', name: 'Party'),
-    ]);
+    final imported = SoundTrackEvent(
+      id: 'imported',
+      name: 'Cerimônia importada',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      audioSettings: const EventAudioSettings.defaults(),
+      moments: [
+        EventMoment.create(id: 'moment', position: 0, name: 'Abertura'),
+      ],
+    );
+    final repository = InMemoryEventRepository([imported]);
     final controller = EventLibraryController(
       repository: repository,
-      newId: () => 'event-2',
+      newId: () => 'event-1',
     );
-    final export = Completer<bool>();
-    var importCalls = 0;
+    final transfer = EventTransferController(
+      gateway: _Gateway(
+        pickedAudio: const PickedDocument(
+          uri: 'content://abertura',
+          displayName: 'abertura.mp3',
+        ),
+      ),
+      codec: const EventExportCodec(),
+      repository: repository,
+      newId: () => 'event-2',
+      clock: DateTime.now,
+    );
+
     await tester.pumpWidget(
       MaterialApp(
         home: EventLibraryPage(
           controller: controller,
-          createEditorController: (_) => throw UnimplementedError(),
-          onExport: (_) => export.future,
-          onImport: () async {
-            importCalls++;
-            return null;
-          },
+          createEditorController: (event) => EventEditorController(
+            repository: repository,
+            initial: event,
+            newId: () => 'moment-new',
+          ),
+          onImport: () async => imported,
+          transferController: transfer,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(PopupMenuButton<EventCardAction>));
+    await _tapImport(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Exportar'));
-    await tester.pump();
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    final importButton = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Importar'),
-    );
-    expect(importButton.onPressed, isNull);
-    expect(importCalls, 0);
-
-    export.complete(true);
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
-    expect(find.text('Evento exportado'), findsOneWidget);
+    await tester.tap(find.text('Voltar ao evento'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EventOverviewPage), findsOneWidget);
+    expect(find.byKey(editEventStructureKey), findsOneWidget);
+    expect(find.text('Cerimônia importada'), findsOneWidget);
   });
 
-  testWidgets('running import disables export and ignores import reentry', (
+  testWidgets('running import disables global actions and ignores reentry', (
     tester,
   ) async {
     final repository = InMemoryEventRepository([
@@ -255,7 +386,6 @@ void main() {
             initial: event,
             newId: () => 'moment',
           ),
-          onExport: (_) async => true,
           onImport: () {
             importCalls++;
             return imported.future;
@@ -264,23 +394,20 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Importar'));
+    await _tapImport(tester);
     await tester.pump();
     expect(importCalls, 1);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
-      tester.widget<EventCard>(find.byType(EventCard)).exportEnabled,
-      isFalse,
-    );
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Importar'))
-          .onPressed,
+      tester.widget<TextButton>(find.byKey(addEventKey)).onPressed,
       isNull,
     );
+    final menu = tester.widget(find.byKey(libraryMenuKey)) as PopupMenuButton;
+    expect(menu.enabled, isFalse);
     await tester.tap(find.byKey(addEventKey));
     await tester.pump();
     expect(find.text('Novo evento'), findsNothing);
-    await tester.tap(find.byType(EventCard), warnIfMissed: false);
+    await tester.tap(find.byType(EventListRow), warnIfMissed: false);
     await tester.pump();
     expect(find.text('Editar evento'), findsNothing);
     expect((await repository.findAll()).length, 1);
@@ -360,6 +487,10 @@ void main() {
 }
 
 class _Gateway implements DocumentGateway {
+  const _Gateway({this.pickedAudio});
+
+  final PickedDocument? pickedAudio;
+
   @override
   Future<bool> canRead(String uri) async => true;
   @override
@@ -370,7 +501,7 @@ class _Gateway implements DocumentGateway {
   @override
   Future<String?> openEventJson() async => null;
   @override
-  Future<PickedDocument?> pickAudio() async => null;
+  Future<PickedDocument?> pickAudio() async => pickedAudio;
   @override
   Future<AudioProbeResult> probeAudio(String uri) async =>
       const AudioProbeResult(playable: true);
@@ -397,4 +528,18 @@ class _MemoryPreflightRecords implements PreflightRecordRepository {
   Future<void> save(PreflightRecord record) async {
     _records[record.eventId] = record;
   }
+}
+
+List<String> _visibleEventNames(WidgetTester tester) {
+  return tester
+      .widgetList<EventListRow>(find.byType(EventListRow))
+      .map((row) => row.event.name)
+      .toList();
+}
+
+Future<void> _tapImport(WidgetTester tester) async {
+  await tester.tap(find.byKey(libraryMenuKey));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Importar evento'));
+  await tester.pump(const Duration(milliseconds: 300));
 }

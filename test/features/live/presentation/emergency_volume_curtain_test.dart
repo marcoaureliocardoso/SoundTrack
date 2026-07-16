@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/features/live/presentation/live_dashboard_keys.dart';
+import 'package:soundtrack/features/live/presentation/widgets/emergency_volume_toggle_bar.dart';
 import 'package:soundtrack/features/live/presentation/widgets/emergency_volume_panel.dart';
 import 'package:soundtrack/features/playback/domain/playback_snapshot.dart';
 
@@ -15,6 +17,30 @@ void main() {
     expect(find.byType(Slider), findsNWidgets(3));
     expect(find.text('Restaurar predefinições'), findsOneWidget);
     expect(find.byType(ExpansionTile), findsNothing);
+  });
+
+  testWidgets('persistent toggle exposes expanded semantics and action', (
+    tester,
+  ) async {
+    var toggles = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EmergencyVolumeToggleBar(
+            expanded: true,
+            onToggle: () => toggles++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(volumesToggleKey), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(volumesToggleKey)).height,
+      greaterThanOrEqualTo(48),
+    );
+    await tester.tap(find.byKey(volumesToggleKey));
+    expect(toggles, 1);
   });
 
   testWidgets('keeps queued volume state while the panel is offstage', (

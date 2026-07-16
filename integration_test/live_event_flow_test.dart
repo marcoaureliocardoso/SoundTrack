@@ -7,7 +7,8 @@ import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
-import 'package:soundtrack/features/events/presentation/widgets/event_card.dart';
+import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
+import 'package:soundtrack/features/events/presentation/widgets/event_list_row.dart';
 import 'package:soundtrack/features/live/application/active_live_session_store.dart';
 import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
@@ -50,9 +51,9 @@ void main() {
       await _pumpFlow(tester);
 
       expect(find.byType(EventLibraryPage), findsOneWidget);
-      await tester.tap(find.byType(EventCard));
+      await tester.tap(find.byType(EventListRow));
       await _pumpFlow(tester);
-      await tester.tap(find.text('Modo Evento'));
+      await tester.tap(find.byKey(prepareLiveEventKey));
       await _pumpFlow(tester);
 
       expect(find.byType(PreflightPage), findsOneWidget);
@@ -99,8 +100,7 @@ void main() {
       await _pumpFlow(tester);
       expect(playback.snapshot.value.narrationActive, isFalse);
 
-      await tester.ensureVisible(find.byKey(emergencyVolumesKey));
-      await tester.tap(find.byKey(emergencyVolumesKey));
+      await tester.tap(find.byKey(volumesToggleKey));
       await _pumpFlow(tester);
       final masterSlider = tester.widget<Slider>(find.byType(Slider).first);
       masterSlider.onChanged!(40);
@@ -130,6 +130,8 @@ void main() {
 
       await tester.binding.handlePopRoute();
       await _pumpFlow(tester);
+      await tester.binding.handlePopRoute();
+      await _pumpFlow(tester);
       await tester.tap(find.text('Sair'));
       await _pumpFlow(tester);
       expect(await activeSessionStore.readEventId(), isNull);
@@ -138,18 +140,24 @@ void main() {
       await tester.binding.handlePopRoute();
       await _pumpFlow(tester);
 
-      await tester.tap(find.byType(PopupMenuButton<EventCardAction>));
+      await tester.tap(find.byType(EventListRow));
+      await _pumpFlow(tester);
+      await tester.tap(find.byKey(eventOverviewMenuKey));
       await _pumpFlow(tester);
       await tester.tap(find.text('Exportar'));
       await _pumpFlow(tester);
       expect(gateway.exportedContents, isNotNull);
 
-      await tester.tap(find.text('Importar'));
+      await tester.binding.handlePopRoute();
       await _pumpFlow(tester);
-      expect(find.text('Localizar músicas'), findsOneWidget);
-      expect(find.text('Nenhuma música selecionada'), findsWidgets);
+      await tester.tap(find.byKey(libraryMenuKey));
+      await _pumpFlow(tester);
+      await tester.tap(find.text('Importar evento'));
+      await _pumpFlow(tester);
+      expect(find.text('Áudios pendentes'), findsOneWidget);
+      expect(find.text('Nenhum arquivo selecionado'), findsWidgets);
 
-      await tester.tap(find.text('Escolher música').first);
+      await tester.tap(find.text('Selecionar').first);
       await _pumpFlow(tester);
       expect(gateway.pickAudioCalls, 1);
     },

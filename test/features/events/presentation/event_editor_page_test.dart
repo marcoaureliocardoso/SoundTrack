@@ -7,6 +7,7 @@ import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
 import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
+import 'package:soundtrack/features/events/presentation/moment_editor_page.dart';
 
 import '../../../support/in_memory_event_repository.dart';
 import '../../../support/accessibility_test_harness.dart';
@@ -30,15 +31,76 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
+      expect(find.byKey(momentTileKey('moment-1')), findsOneWidget);
       await tester.drag(
         find.byType(ReorderableListView),
         const Offset(0, -600),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(momentTileKey('moment-1')), findsOneWidget);
+      expect(find.byKey(eventAudioSectionKey), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('uses the approved structure hierarchy and vocabulary', (
+    tester,
+  ) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: _validEvent(),
+      newId: () => 'moment-2',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+
+    expect(find.text('Editar estrutura'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Salvar'), findsOneWidget);
+    expect(find.text('Nome do evento'), findsOneWidget);
+    expect(find.text('Momentos'), findsOneWidget);
+    expect(find.text('Adicionar'), findsOneWidget);
+    expect(find.text('Áudio do evento'), findsOneWidget);
+    expect(find.text('Master'), findsOneWidget);
+    expect(find.text('Música'), findsOneWidget);
+    expect(find.text('Música durante a narração'), findsOneWidget);
+    expect(find.text('Fade-in'), findsOneWidget);
+    expect(find.text('Fade-out'), findsOneWidget);
+    expect(find.text('Identificação'), findsNothing);
+    expect(find.text('Modo Evento'), findsNothing);
+    expect(find.byKey(addMomentKey), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+  });
+
+  testWidgets('adds a moment through the full screen editor', (tester) async {
+    final controller = EventEditorController(
+      repository: InMemoryEventRepository(),
+      initial: SoundTrackEvent.create(id: 'event-1', name: 'Formatura'),
+      newId: () => 'moment-1',
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: EventEditorPage(controller: controller)),
+    );
+
+    await tester.tap(find.byKey(addMomentKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MomentEditorPage), findsOneWidget);
+    expect(find.byKey(deleteMomentKey), findsNothing);
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    final saveButton = find.descendant(
+      of: find.byType(MomentEditorPage),
+      matching: find.widgetWithText(TextButton, 'Salvar'),
+    );
+    expect(tester.widget<TextButton>(saveButton).onPressed, isNotNull);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MomentEditorPage), findsNothing);
+    expect(controller.draft.moments.single.name, 'Entrada');
+    expect(find.byType(EventEditorPage), findsOneWidget);
+  });
 
   testWidgets('adds and reorders moments', (tester) async {
     var nextId = 0;
@@ -52,20 +114,18 @@ void main() {
       MaterialApp(home: EventEditorPage(controller: controller)),
     );
 
-    final liveModeButton = find.widgetWithText(FilledButton, 'Modo Evento');
-    expect(liveModeButton, findsOneWidget);
-    expect(tester.widget<FilledButton>(liveModeButton).onPressed, isNotNull);
+    await tester.tap(find.byKey(addMomentKey));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.text('Adicionar'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(addMomentKey));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Brinde');
-    await tester.tap(find.text('Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Brinde');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     expect(controller.draft.moments.map((moment) => moment.name), [
@@ -76,7 +136,11 @@ void main() {
     final secondMoment = find.byKey(momentTileKey('moment-2'));
     await tester.drag(find.byType(ReorderableListView), const Offset(0, -120));
     await tester.pumpAndSettle();
-    await tester.drag(secondMoment, const Offset(0, -200));
+    final secondHandle = find.descendant(
+      of: secondMoment,
+      matching: find.byIcon(Icons.drag_handle),
+    );
+    await tester.drag(secondHandle, const Offset(0, -200));
     await tester.pumpAndSettle();
 
     expect(controller.draft.moments.map((moment) => moment.name), [
@@ -105,7 +169,7 @@ void main() {
       isFalse,
     );
     expect(
-      tester.widget<FloatingActionButton>(find.byKey(addMomentKey)).onPressed,
+      tester.widget<TextButton>(find.byKey(addMomentKey)).onPressed,
       isNull,
     );
 
@@ -174,11 +238,12 @@ void main() {
     );
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.text('Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.save));
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
 
     final persisted = await repository.findById('event-1');
@@ -202,7 +267,7 @@ void main() {
     expect(find.text('Informe o nome do evento.'), findsOneWidget);
     expect(
       tester
-          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save))
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Salvar'))
           .onPressed,
       isNull,
     );
@@ -230,34 +295,8 @@ void main() {
     );
 
     expect(find.text('Áudio pendente: Entrada.mp3'), findsOneWidget);
-    expect(find.text('Loop'), findsOneWidget);
+    expect(find.text('Repetir em loop'), findsOneWidget);
     expect(find.text('Entrada.mp3 • Loop'), findsNothing);
-  });
-
-  testWidgets('starts live flow with the exact immutable draft snapshot', (
-    tester,
-  ) async {
-    final controller = EventEditorController(
-      repository: InMemoryEventRepository(),
-      initial: _validEvent(),
-      newId: () => 'unused',
-    )..rename('Rascunho ao vivo');
-    SoundTrackEvent? snapshot;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EventEditorPage(
-          controller: controller,
-          onStartLive: (event) async {
-            snapshot = event;
-          },
-        ),
-      ),
-    );
-    await tester.tap(find.text('Modo Evento'));
-
-    expect(identical(snapshot, controller.draft), isTrue);
-    expect(controller.dirty, isTrue);
   });
 }
 

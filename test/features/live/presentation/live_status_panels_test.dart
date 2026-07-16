@@ -22,7 +22,17 @@ void main() {
     await tester.pumpWidget(_panel(state: _state(track: longTrack)));
 
     expect(find.byType(TrackNameTicker), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.byKey(nowPlayingTrackKey), findsOneWidget);
+    final progress = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(progress.value, closeTo(12 / 180, .001));
+    final decoration = tester.widget<DecoratedBox>(
+      find.byKey(nowPlayingAccentKey),
+    );
+    final border = (decoration.decoration as BoxDecoration).border! as Border;
+    expect(border.left.width, greaterThanOrEqualTo(3));
     expect(find.text('AGORA'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
@@ -36,6 +46,32 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('normal now playing keeps natural height at 200 percent', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      _panel(state: _state(track: longTrack), textScale: 2, width: 320),
+    );
+
+    final exception = tester.takeException();
+    expect(
+      exception,
+      isNull,
+      reason: exception is FlutterError ? exception.toStringDeep() : null,
+    );
+    expect(
+      tester.getSize(find.byKey(nowPlayingPanelKey)).height,
+      greaterThan(180),
+    );
+    expect(find.byType(TrackNameTicker), findsOneWidget);
+    expect(find.text('Reproduzindo'), findsOneWidget);
+    expect(find.text('0:12 / 3:00'), findsOneWidget);
+  });
+
   testWidgets('compact now playing opens the complete track in a dialog', (
     tester,
   ) async {
@@ -43,16 +79,17 @@ void main() {
       _panel(state: _state(track: longTrack), compact: true),
     );
 
-    expect(find.byType(TrackNameTicker), findsNothing);
+    expect(find.byType(TrackNameTicker), findsOneWidget);
+    expect(find.byKey(nowPlayingTrackKey), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('Entrada dos formandos'), findsOneWidget);
-    expect(find.text('Reproduzindo'), findsOneWidget);
-    expect(find.text('0:12 / 3:00'), findsOneWidget);
+    expect(find.text('Reproduzindo · 0:12 / 3:00'), findsOneWidget);
 
     await tester.tap(find.byKey(nowPlayingPanelKey));
     await tester.pumpAndSettle();
 
     expect(find.byKey(nowPlayingDetailsKey), findsOneWidget);
-    expect(find.text(longTrack), findsOneWidget);
+    expect(find.text(longTrack), findsWidgets);
   });
 
   testWidgets('compact alert keeps details and dismiss as separate actions', (
@@ -100,15 +137,26 @@ void main() {
   });
 }
 
-Widget _panel({required LiveEventState state, bool compact = false}) {
+Widget _panel({
+  required LiveEventState state,
+  bool compact = false,
+  double textScale = 1,
+  double width = 480,
+}) {
   return MaterialApp(
-    home: Scaffold(
-      body: SizedBox(
-        width: 480,
-        child: NowPlayingPanel(
-          key: nowPlayingPanelKey,
-          state: state,
-          compact: compact,
+    home: MediaQuery(
+      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+      child: Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: width,
+            child: NowPlayingPanel(
+              key: nowPlayingPanelKey,
+              state: state,
+              compact: compact,
+            ),
+          ),
         ),
       ),
     ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../application/event_editor_controller.dart';
+import '../../../app/theme/soundtrack_theme.dart';
 import '../application/event_library_controller.dart';
 import '../application/event_transfer_controller.dart';
 import '../data/event_export_codec.dart';
@@ -8,18 +8,21 @@ import '../domain/audio_reference.dart';
 import '../domain/soundtrack_event.dart';
 import '../../../platform/documents/document_gateway.dart';
 import 'audio_relink_page.dart';
-import 'event_editor_page.dart';
-import 'widgets/event_card.dart';
+import 'event_flow_callbacks.dart';
+import 'event_overview_page.dart';
+import 'event_sort_order.dart';
+import 'widgets/event_list_row.dart';
 
 const addEventKey = Key('add-event');
+const eventSortKey = Key('event-sort');
+const libraryMenuKey = Key('library-menu');
 const eventNameFieldKey = Key('event-name-field');
 
-typedef EventEditorControllerFactory =
-    EventEditorController Function(SoundTrackEvent event);
-typedef EventExportCallback = Future<bool> Function(SoundTrackEvent event);
-typedef EventImportCallback = Future<SoundTrackEvent?> Function();
-typedef EventLiveEntryPageBuilder = Widget Function(SoundTrackEvent event);
 const openAudioEngineLabKey = Key('open-audio-engine-lab');
+
+Key librarySkeletonRowKey(int index) => ValueKey('library-skeleton-$index');
+
+enum _LibraryMenuAction { importEvent, audioEngineLab }
 
 class EventLibraryPage extends StatefulWidget {
   const EventLibraryPage({
@@ -49,7 +52,10 @@ class EventLibraryPage extends StatefulWidget {
 
 class _EventLibraryPageState extends State<EventLibraryPage> {
   bool _documentBusy = false;
-  bool _openingLive = false;
+  EventSortOrder _sortOrder = EventSortOrder.newest;
+
+  List<SoundTrackEvent> get _visibleEvents =>
+      sortEvents(widget.controller.events, _sortOrder);
 
   @override
   void initState() {
@@ -61,30 +67,45 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meus Eventos'),
+        title: const Text('Eventos'),
         actions: [
-          if (widget.audioEngineLabRoute != null)
-            IconButton(
-              key: openAudioEngineLabKey,
-              tooltip: 'Audio Engine Lab',
-              onPressed: () =>
-                  Navigator.of(context).pushNamed(widget.audioEngineLabRoute!),
-              icon: const Icon(Icons.science),
-            ),
-          if (_documentBusy)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+          TextButton(
+            key: addEventKey,
+            onPressed: _documentBusy ? null : _create,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(
+                SoundTrackTokens.targetMinSize,
+                SoundTrackTokens.targetMinSize,
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
-          if (widget.onImport != null)
-            TextButton.icon(
-              onPressed: _documentBusy ? null : _import,
-              icon: const Icon(Icons.file_open),
-              label: const Text('Importar'),
-            ),
+            child: const Text('Novo'),
+          ),
+          PopupMenuButton<_LibraryMenuAction>(
+            key: libraryMenuKey,
+            tooltip: 'Mais opções da biblioteca',
+            enabled: !_documentBusy,
+            icon: _documentBusy
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.more_vert),
+            onSelected: _handleLibraryMenuAction,
+            itemBuilder: (context) => [
+              if (widget.onImport != null)
+                const PopupMenuItem(
+                  value: _LibraryMenuAction.importEvent,
+                  child: Text('Importar evento'),
+                ),
+              if (widget.audioEngineLabRoute != null)
+                const PopupMenuItem(
+                  key: openAudioEngineLabKey,
+                  value: _LibraryMenuAction.audioEngineLab,
+                  child: Text('Audio Engine Lab'),
+                ),
+            ],
+          ),
         ],
       ),
       body: AbsorbPointer(
@@ -93,91 +114,130 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
           listenable: widget.controller,
           builder: (context, _) {
             if (widget.controller.loading && widget.controller.events.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const _LibrarySkeleton();
             }
             if (widget.controller.error != null &&
                 widget.controller.events.isEmpty) {
               return _ErrorView(onRetry: widget.controller.load);
             }
-            if (widget.controller.events.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Nenhum evento. Crie o primeiro para começar.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
+            final events = _visibleEvents;
+            final momentCount = events.fold<int>(
+              0,
+              (total, event) => total + event.moments.length,
+            );
             return RefreshIndicator(
               onRefresh: _refresh,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                itemCount: widget.controller.events.length,
-                itemBuilder: (context, index) {
-                  final event = widget.controller.events[index];
-                  return EventCard(
-                    key: ValueKey(event.id),
-                    event: event,
-                    preflightStatusLabel: _preflightStatusLabel(
-                      widget.controller.preflightStatusFor(event),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  SoundTrackTokens.pagePadding,
+                  12,
+                  SoundTrackTokens.pagePadding,
+                  32,
+                ),
+                children: [
+                  Text(
+                    '${events.length} '
+                    '${events.length == 1 ? 'evento' : 'eventos'} · '
+                    '$momentCount '
+                    '${momentCount == 1 ? 'momento' : 'momentos'}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: SoundTrackTokens.secondaryText,
                     ),
-                    exportEnabled: widget.onExport != null && !_documentBusy,
-                    onAction: (action) => _handleAction(event, action),
-                  );
-                },
+                  ),
+                  const SizedBox(height: SoundTrackTokens.sectionGap),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Seus eventos',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      PopupMenuButton<EventSortOrder>(
+                        key: eventSortKey,
+                        tooltip: 'Ordenar eventos',
+                        initialValue: _sortOrder,
+                        onSelected: (value) {
+                          setState(() => _sortOrder = value);
+                        },
+                        itemBuilder: (context) => EventSortOrder.values
+                            .map(
+                              (order) => PopupMenuItem(
+                                value: order,
+                                child: Text(_sortOrderLabel(order)),
+                              ),
+                            )
+                            .toList(),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: SoundTrackTokens.targetMinSize,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 6,
+                              children: [
+                                const Icon(Icons.sort, size: 20),
+                                Text(_sortOrderLabel(_sortOrder)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (events.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 56),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Nenhum evento ainda',
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Use Novo no cabeçalho para criar o primeiro.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    for (var index = 0; index < events.length; index++) ...[
+                      EventListRow(
+                        key: ValueKey(events[index].id),
+                        event: events[index],
+                        number: index + 1,
+                        status: _preflightStatusLabel(
+                          widget.controller.preflightStatusFor(events[index]),
+                        ),
+                        onTap: _documentBusy
+                            ? null
+                            : () => _open(events[index]),
+                      ),
+                      if (index < events.length - 1) const Divider(height: 1),
+                    ],
+                ],
               ),
             );
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: addEventKey,
-        onPressed: _documentBusy ? null : _create,
-        icon: const Icon(Icons.add),
-        label: const Text('Evento'),
-      ),
     );
   }
 
-  Future<void> _handleAction(
-    SoundTrackEvent event,
-    EventCardAction action,
-  ) async {
-    if (_documentBusy) return;
+  void _handleLibraryMenuAction(_LibraryMenuAction action) {
     switch (action) {
-      case EventCardAction.open:
-        await _open(event);
-      case EventCardAction.duplicate:
-        await _run(() => widget.controller.duplicate(event.id));
-      case EventCardAction.rename:
-        final name = await _requestName(
-          title: 'Renomear evento',
-          actionLabel: 'Renomear',
-          initialValue: event.name,
-        );
-        if (name != null) {
-          await _run(() => widget.controller.rename(event.id, name));
-        }
-      case EventCardAction.export:
-        if (_documentBusy) return;
-        final export = widget.onExport;
-        if (export != null) {
-          setState(() => _documentBusy = true);
-          try {
-            final exported = await export(event);
-            if (mounted) {
-              _message(exported ? 'Evento exportado' : 'Exportação cancelada');
-            }
-          } catch (error) {
-            if (mounted) _message(eventDocumentErrorMessage(error));
-          } finally {
-            if (mounted) setState(() => _documentBusy = false);
-          }
-        }
-      case EventCardAction.delete:
-        await _confirmDelete(event);
+      case _LibraryMenuAction.importEvent:
+        _import();
+      case _LibraryMenuAction.audioEngineLab:
+        Navigator.of(context).pushNamed(widget.audioEngineLabRoute!);
     }
   }
 
@@ -205,34 +265,20 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     bool allowWhileDocumentBusy = false,
   }) async {
     if (_documentBusy && !allowWhileDocumentBusy) return;
-    final editorController = widget.createEditorController(event);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (context) => EventEditorPage(
-          controller: editorController,
+        builder: (context) => EventOverviewPage(
+          eventId: event.id,
+          libraryController: widget.controller,
+          createEditorController: widget.createEditorController,
           onSelectAudio: widget.onSelectAudio,
-          onStartLive: widget.buildLiveEntryPage == null ? null : _openLive,
+          onExport: widget.onExport,
+          buildLiveEntryPage: widget.buildLiveEntryPage,
         ),
       ),
     );
-    editorController.dispose();
     if (mounted) {
       await widget.controller.load();
-    }
-  }
-
-  Future<void> _openLive(SoundTrackEvent snapshot) async {
-    final builder = widget.buildLiveEntryPage;
-    if (builder == null || _openingLive) return;
-    _openingLive = true;
-    try {
-      await Navigator.of(
-        context,
-      ).push<void>(MaterialPageRoute(builder: (_) => builder(snapshot)));
-    } finally {
-      if (mounted) {
-        _openingLive = false;
-      }
     }
   }
 
@@ -250,7 +296,7 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       if (!mounted) return;
       final hasPending = imported.moments.any((moment) => moment.audioPending);
       if (hasPending && widget.transferController != null) {
-        await Navigator.of(context).push<void>(
+        final relinked = await Navigator.of(context).push<SoundTrackEvent>(
           MaterialPageRoute(
             builder: (_) => AudioRelinkPage(
               event: imported,
@@ -258,7 +304,16 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
             ),
           ),
         );
-        if (mounted) await widget.controller.load();
+        if (!mounted) return;
+        await widget.controller.load();
+        if (!mounted) return;
+        final resolved =
+            relinked != null &&
+            !relinked.moments.any((moment) => moment.audioPending);
+        if (resolved) {
+          _message('Evento importado');
+          await _open(relinked, allowWhileDocumentBusy: true);
+        }
       } else {
         _message('Evento importado');
         await _open(imported, allowWhileDocumentBusy: true);
@@ -308,31 +363,6 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
-  Future<void> _confirmDelete(SoundTrackEvent event) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Excluir evento?'),
-        content: Text(
-          'Excluir “${event.name}”? Esta ação não pode ser desfeita.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await _run(() => widget.controller.delete(event.id));
-    }
-  }
-
   Future<void> _run(Future<Object?> Function() operation) async {
     try {
       await operation();
@@ -344,6 +374,15 @@ class _EventLibraryPageState extends State<EventLibraryPage> {
       }
     }
   }
+}
+
+String _sortOrderLabel(EventSortOrder order) {
+  return switch (order) {
+    EventSortOrder.newest => 'Mais recentes',
+    EventSortOrder.oldest => 'Mais antigos',
+    EventSortOrder.nameAscending => 'Nome: A–Z',
+    EventSortOrder.nameDescending => 'Nome: Z–A',
+  };
 }
 
 String _preflightStatusLabel(EventPreflightStatus status) {
@@ -381,16 +420,83 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.all(SoundTrackTokens.pagePadding),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Não foi possível carregar os eventos',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Verifique o acesso ao armazenamento e tente novamente.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LibrarySkeleton extends StatelessWidget {
+  const _LibrarySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: .1);
+    return ExcludeSemantics(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          SoundTrackTokens.pagePadding,
+          28,
+          SoundTrackTokens.pagePadding,
+          32,
+        ),
         children: [
-          const Text('Não foi possível carregar seus eventos'),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: onRetry,
-            child: const Text('Tentar novamente'),
-          ),
+          for (var index = 0; index < 3; index++)
+            Padding(
+              key: librarySkeletonRowKey(index),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FractionallySizedBox(
+                          widthFactor: .62,
+                          child: Container(height: 16, color: color),
+                        ),
+                        const SizedBox(height: 10),
+                        FractionallySizedBox(
+                          widthFactor: .38,
+                          child: Container(height: 12, color: color),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

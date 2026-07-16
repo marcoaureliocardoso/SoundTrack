@@ -5,7 +5,9 @@ import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
 import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
-import 'package:soundtrack/features/events/presentation/widgets/event_card.dart';
+import 'package:soundtrack/features/events/presentation/moment_editor_page.dart';
+import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
+import 'package:soundtrack/features/events/presentation/widgets/event_list_row.dart';
 import 'package:soundtrack/platform/documents/document_gateway.dart';
 
 import '../test/support/in_memory_event_repository.dart';
@@ -39,34 +41,41 @@ void main() {
     await tester.enterText(find.byKey(eventNameFieldKey), 'Casamento');
     await tester.tap(find.text('Criar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(EventCard));
+    await tester.tap(find.byType(EventListRow));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(editEventStructureKey));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(addMomentKey));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(momentNameFieldKey), 'Entrada');
-    await tester.tap(find.text('Adicionar'));
+    await tester.enterText(find.byKey(momentEditorNameFieldKey), 'Entrada');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.save));
+    await tester.tap(find.widgetWithText(TextButton, 'Salvar'));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PopupMenuButton<EventCardAction>));
+    await tester.tap(find.byKey(eventOverviewMenuKey));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Exportar'));
     await tester.pumpAndSettle();
     expect(gateway.exportedContents, isNotNull);
 
-    await tester.tap(find.text('Importar'));
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Localizar músicas'), findsOneWidget);
-    expect(find.text('Nenhuma música selecionada'), findsOneWidget);
+    await tester.tap(find.byKey(libraryMenuKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Importar evento'));
+    await tester.pumpAndSettle();
+    expect(find.text('Áudios pendentes'), findsOneWidget);
+    expect(find.text('Nenhum arquivo selecionado'), findsOneWidget);
 
-    await tester.tap(find.text('Escolher música'));
+    await tester.tap(find.text('Selecionar'));
     await tester.pumpAndSettle();
     expect(find.text('Todas as músicas foram localizadas.'), findsOneWidget);
-    expect(find.text('Concluir'), findsOneWidget);
+    expect(find.text('Voltar ao evento'), findsOneWidget);
   });
 }
 

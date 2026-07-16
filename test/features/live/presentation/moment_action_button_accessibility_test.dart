@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/features/events/domain/audio_reference.dart';
@@ -49,18 +51,60 @@ void main() {
     expect(momentText.overflow, TextOverflow.ellipsis);
     expect(fileText.maxLines, 1);
     expect(fileText.overflow, TextOverflow.ellipsis);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(
+      tester.getSize(find.byType(MomentActionButton)).height,
+      greaterThanOrEqualTo(64),
+    );
     expect(
       tester.getSemantics(find.byType(MomentActionButton)).label,
       contains(fileName),
     );
   });
 
-  testWidgets('uses one accessible foreground for every ready moment label', (
+  testWidgets('whole ready row is tappable and unavailable rows are disabled', (
+    tester,
+  ) async {
+    final moment = _momentWithAudio();
+    var taps = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MomentActionButton(
+            number: 1,
+            moment: moment,
+            status: MomentStatus.ready,
+            onPressed: () => taps++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(MomentActionButton));
+    expect(taps, 1);
+    expect(tester.widget<InkWell>(find.byType(InkWell)).onTap, isNotNull);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MomentActionButton(
+            number: 1,
+            moment: moment,
+            status: MomentStatus.pending,
+            onPressed: () => taps++,
+          ),
+        ),
+      ),
+    );
+    expect(tester.widget<InkWell>(find.byType(InkWell)).onTap, isNull);
+  });
+
+  testWidgets('current row exposes selection and an accessible accent', (
     tester,
   ) async {
     final theme = _darkTheme();
     final moment = _momentWithAudio();
-
     await tester.pumpWidget(
       MaterialApp(
         theme: theme,
@@ -68,108 +112,30 @@ void main() {
           body: MomentActionButton(
             number: 1,
             moment: moment,
-            status: MomentStatus.ready,
+            status: MomentStatus.current,
             onPressed: () {},
           ),
         ),
       ),
     );
 
-    for (final label in [
-      '1',
-      moment.name,
-      moment.audio!.displayName,
-      'TOQUE PARA INICIAR',
-    ]) {
-      expect(
-        tester.widget<Text>(find.text(label)).style?.color,
-        theme.colorScheme.onPrimary,
-      );
-    }
-    expect(
-      contrastRatio(theme.colorScheme.onPrimary, theme.colorScheme.primary),
-      greaterThanOrEqualTo(4.5),
+    final semantics = tester
+        .getSemantics(find.byType(MomentActionButton))
+        .getSemanticsData();
+    expect(semantics.flagsCollection.isSelected, Tristate.isTrue);
+    expect(semantics.flagsCollection.isEnabled, Tristate.isFalse);
+    final stripe = tester.widget<DecoratedBox>(
+      find.byKey(momentStatusStripeKey(moment.id)),
     );
-  });
-
-  testWidgets('uses accessible colors for every unavailable moment state', (
-    tester,
-  ) async {
-    final theme = _darkTheme();
-    final colors = theme.colorScheme;
-    final moment = _momentWithAudio();
-    final cases = [
-      (
-        status: MomentStatus.current,
-        commandEnabled: true,
-        background: colors.primaryContainer,
-        foreground: colors.onPrimaryContainer,
-        statusText: 'ATUAL',
+    final border = (stripe.decoration as BoxDecoration).border! as Border;
+    expect(border.left.width, greaterThanOrEqualTo(3));
+    expect(
+      contrastRatio(
+        theme.colorScheme.primary,
+        theme.colorScheme.surfaceContainerHigh,
       ),
-      (
-        status: MomentStatus.pending,
-        commandEnabled: true,
-        background: colors.surfaceContainerHighest,
-        foreground: colors.onSurfaceVariant,
-        statusText: 'ÁUDIO PENDENTE',
-      ),
-      (
-        status: MomentStatus.error,
-        commandEnabled: true,
-        background: colors.surfaceContainerHighest,
-        foreground: colors.onSurfaceVariant,
-        statusText: 'ERRO NO ÁUDIO',
-      ),
-      (
-        status: MomentStatus.ready,
-        commandEnabled: false,
-        background: colors.surfaceContainerHighest,
-        foreground: colors.onSurfaceVariant,
-        statusText: 'TOQUE PARA INICIAR',
-      ),
-    ];
-
-    for (final testCase in cases) {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: theme,
-          home: Scaffold(
-            body: MomentActionButton(
-              number: 1,
-              moment: moment,
-              status: testCase.status,
-              commandEnabled: testCase.commandEnabled,
-              onPressed: () {},
-            ),
-          ),
-        ),
-      );
-
-      final button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(
-        button.style?.backgroundColor?.resolve({WidgetState.disabled}),
-        testCase.background,
-      );
-      expect(
-        button.style?.foregroundColor?.resolve({WidgetState.disabled}),
-        testCase.foreground,
-      );
-      for (final label in [
-        '1',
-        moment.name,
-        moment.audio!.displayName,
-        testCase.statusText,
-      ]) {
-        expect(
-          tester.widget<Text>(find.text(label)).style?.color,
-          testCase.foreground,
-        );
-      }
-      expect(
-        contrastRatio(testCase.foreground, testCase.background),
-        greaterThanOrEqualTo(4.5),
-      );
-    }
+      greaterThanOrEqualTo(3),
+    );
   });
 }
 

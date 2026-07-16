@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:soundtrack/app/app_dependencies.dart';
 import 'package:soundtrack/app/soundtrack_app.dart';
+import 'package:soundtrack/app/widgets/editorial_components.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
-import 'package:soundtrack/features/events/presentation/event_editor_page.dart';
 import 'package:soundtrack/features/events/presentation/event_library_page.dart';
+import 'package:soundtrack/features/events/presentation/event_overview_page.dart';
 import 'package:soundtrack/features/live/application/preflight_record_repository.dart';
 import 'package:soundtrack/features/live/presentation/live_dashboard_page.dart';
 import 'package:soundtrack/features/live/presentation/preflight_page.dart';
@@ -29,20 +30,23 @@ void main() {
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     final appBar = tester.widget<AppBar>(find.byType(AppBar));
-    final floatingActionButton = tester.widget<FloatingActionButton>(
-      find.byType(FloatingActionButton),
-    );
-    final eventLibraryContext = tester.element(find.text('Meus Eventos'));
+    final eventLibraryContext = tester.element(find.text('Eventos'));
 
     expect(materialApp.theme?.useMaterial3, isTrue);
     expect(Theme.of(eventLibraryContext).brightness, Brightness.dark);
     expect(
       appBar.title,
-      isA<Text>().having((title) => title.data, 'data', 'Meus Eventos'),
+      isA<Text>().having((title) => title.data, 'data', 'Eventos'),
     );
-    expect(find.text('Meus Eventos'), findsOneWidget);
-    expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(floatingActionButton.onPressed, isNotNull);
+    expect(find.text('Eventos'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(
+      tester.widget<TextButton>(find.byKey(addEventKey)).onPressed,
+      isNotNull,
+    );
+    expect(find.byKey(libraryMenuKey), findsOneWidget);
+    await tester.tap(find.byKey(libraryMenuKey));
+    await tester.pumpAndSettle();
     expect(find.byKey(openAudioEngineLabKey), findsOneWidget);
   });
 
@@ -64,7 +68,7 @@ void main() {
     );
   });
 
-  testWidgets('navigates editor to preflight to live dashboard', (
+  testWidgets('navigates event context to preflight to live dashboard', (
     tester,
   ) async {
     final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
@@ -85,12 +89,13 @@ void main() {
 
     await tester.tap(find.text('Formatura'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Modo Evento'));
+    expect(find.byType(EventOverviewPage), findsOneWidget);
+    await tester.tap(find.byKey(prepareLiveEventKey));
     await tester.pumpAndSettle();
 
     expect(find.byType(PreflightPage), findsOneWidget);
     expect(playback.commands, isEmpty);
-    await tester.tap(find.text('Iniciar Modo Evento'));
+    await tester.tap(find.text('Entrar no Modo Evento'));
     await tester.pumpAndSettle();
 
     expect(find.byType(LiveDashboardPage), findsOneWidget);
@@ -98,7 +103,9 @@ void main() {
     expect(playback.commands, isEmpty);
   });
 
-  testWidgets('serializes repeated live entry from the editor', (tester) async {
+  testWidgets('serializes repeated live entry from the event context', (
+    tester,
+  ) async {
     final event = SoundTrackEvent.create(id: 'event-1', name: 'Formatura');
     await tester.pumpWidget(
       SoundTrackApp(
@@ -116,18 +123,18 @@ void main() {
     await tester.tap(find.text('Formatura'));
     await tester.pumpAndSettle();
 
-    final liveButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Modo Evento'),
+    final liveAction = tester.widget<OperationalActionRow>(
+      find.byKey(prepareLiveEventKey),
     );
-    liveButton.onPressed!();
-    liveButton.onPressed!();
+    liveAction.onTap!();
+    liveAction.onTap!();
     await tester.pumpAndSettle();
     expect(find.byType(PreflightPage), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byType(PreflightPage), findsNothing);
-    expect(find.byType(EventEditorPage), findsOneWidget);
+    expect(find.byType(EventOverviewPage), findsOneWidget);
   });
 }
 

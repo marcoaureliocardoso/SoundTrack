@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:soundtrack/app/widgets/editorial_components.dart';
 import 'package:soundtrack/features/events/domain/audio_reference.dart';
 import 'package:soundtrack/features/events/domain/event_moment.dart';
 import 'package:soundtrack/features/events/domain/soundtrack_event.dart';
@@ -39,7 +40,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        await tester.drag(find.byType(ListView), const Offset(0, -500));
+        await tester.scrollUntilVisible(
+          find.byKey(preflightEnterKey),
+          240,
+          scrollable: find.byType(Scrollable),
+        );
         await tester.pumpAndSettle();
         expect(find.text('Entrar mesmo assim'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -81,12 +86,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Erros'), findsOneWidget);
-    expect(find.text('Avisos'), findsOneWidget);
-    expect(find.text('Informações'), findsOneWidget);
+    expect(find.text('Formatura'), findsOneWidget);
+    expect(find.text('Verificado agora'), findsOneWidget);
+    expect(find.text('0/1'), findsOneWidget);
+    expect(find.text('ERROS'), findsWidgets);
+    expect(find.text('AVISOS'), findsWidgets);
+    expect(find.text('INFORMAÇÕES'), findsOneWidget);
     expect(find.textContaining('Entrada'), findsOneWidget);
     expect(find.text('Saída de áudio: Alto-falante.'), findsOneWidget);
     expect(find.text('Entrar mesmo assim'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Entrar mesmo assim'),
+      findsNothing,
+    );
   });
 
   testWidgets('ignores a check result after disposal', (tester) async {
@@ -117,8 +129,8 @@ void main() {
     );
 
     await tester.pumpWidget(_app(service: service));
-    final checkingButton = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Reverificar'),
+    final checkingButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Reverificar'),
     );
     expect(checkingButton.onPressed, isNull);
     expect(readCalls, 1);
@@ -230,7 +242,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Iniciar Modo Evento'));
+    await tester.tap(find.text('Entrar no Modo Evento'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ao vivo'), findsOneWidget);
@@ -251,21 +263,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Iniciar Modo Evento'),
+    final action = tester.widget<OperationalActionRow>(
+      find.byKey(preflightEnterKey),
     );
-    button.onPressed!();
-    button.onPressed!();
+    action.onTap!();
+    action.onTap!();
     await tester.pumpAndSettle();
     expect(dashboardBuilds, 1);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    final returnedButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Iniciar Modo Evento'),
+    final returnedAction = tester.widget<OperationalActionRow>(
+      find.byKey(preflightEnterKey),
     );
-    expect(returnedButton.onPressed, isNotNull);
-    await tester.tap(find.text('Iniciar Modo Evento'));
+    expect(returnedAction.onTap, isNotNull);
+    await tester.tap(find.text('Entrar no Modo Evento'));
     await tester.pumpAndSettle();
     expect(dashboardBuilds, 2);
   });
@@ -286,19 +298,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final entryButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Entrar mesmo assim'),
+    final entryAction = tester.widget<OperationalActionRow>(
+      find.byKey(preflightEnterKey),
     );
-    entryButton.onPressed!();
-    entryButton.onPressed!();
+    entryAction.onTap!();
+    entryAction.onTap!();
     await tester.pumpAndSettle();
     expect(find.text('Confirmar entrada'), findsOneWidget);
     expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Entrar mesmo assim'),
-          )
-          .onPressed,
+      tester.widget<OperationalActionRow>(find.byKey(preflightEnterKey)).onTap,
       isNull,
     );
 
@@ -326,12 +334,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Não foi possível concluir a verificação.'),
+      find.text('Não foi possível concluir a verificação'),
       findsOneWidget,
     );
     await tester.tap(find.text('Tentar novamente'));
     await tester.pumpAndSettle();
-    expect(find.text('Iniciar Modo Evento'), findsOneWidget);
+    expect(find.text('Entrar no Modo Evento'), findsOneWidget);
   });
 }
 

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/soundtrack_theme.dart';
 import '../../events/domain/event_moment.dart';
 import '../../events/domain/soundtrack_event.dart';
 import '../../playback/domain/playback_alert.dart';
@@ -14,6 +15,7 @@ export 'live_dashboard_keys.dart';
 
 import 'live_dashboard_keys.dart';
 import 'widgets/emergency_volume_panel.dart';
+import 'widgets/emergency_volume_toggle_bar.dart';
 import 'widgets/live_alert_banner.dart';
 import 'widgets/moment_action_button.dart';
 import 'widgets/now_playing_panel.dart';
@@ -118,10 +120,13 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         appBar: AppBar(
           toolbarHeight: shortScreen ? 48 : null,
           title: shortScreen
-              ? Text(
-                  '${event.name} • Modo Evento',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ? ValueListenableBuilder<String>(
+                  valueListenable: _outputRouteLabel,
+                  builder: (context, label, _) => Text(
+                    '${event.name} • Modo Evento • $label',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,32 +142,34 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                     ),
                   ],
                 ),
-          bottom: PreferredSize(
-            preferredSize: Size.fromHeight(shortScreen ? 24 : 32),
-            child: SizedBox(
-              height: shortScreen ? 24 : 32,
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.speaker, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ValueListenableBuilder<String>(
-                        valueListenable: _outputRouteLabel,
-                        builder: (context, label, _) => Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+          bottom: shortScreen
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(32),
+                  child: SizedBox(
+                    height: 32,
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.speaker, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ValueListenableBuilder<String>(
+                              valueListenable: _outputRouteLabel,
+                              builder: (context, label, _) => Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
         ),
         body: SafeArea(
           child: LayoutBuilder(
@@ -197,6 +204,11 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
                           reduceMotion: reduceMotion,
                         ),
                       ),
+                      EmergencyVolumeToggleBar(
+                        expanded: volumesExpanded,
+                        compact: compact || veryShort,
+                        onToggle: widget.controller.toggleControlsExpanded,
+                      ),
                       _buildControls(compact: compact || veryShort),
                     ],
                   ),
@@ -226,24 +238,23 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
             slivers: [
               SliverToBoxAdapter(
                 child: Text(
-                  'MOMENTOS — TOQUE PARA INICIAR',
+                  'MOMENTOS',
                   key: momentsSectionTitleKey,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: SoundTrackTokens.sectionGap),
+              ),
               SliverList.builder(
                 itemCount: momentCount,
                 itemBuilder: (context, momentIndex) {
                   final moment = event.moments[momentIndex];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _LiveMomentItem(
-                      controller: widget.controller,
-                      number: momentIndex + 1,
-                      moment: moment,
-                      builder: widget.momentBuilder,
-                    ),
+                  return _LiveMomentItem(
+                    controller: widget.controller,
+                    number: momentIndex + 1,
+                    moment: moment,
+                    builder: widget.momentBuilder,
                   );
                 },
               ),
@@ -259,17 +270,7 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          AnimatedOpacity(
-            opacity: volumesExpanded ? 0 : 1,
-            duration: duration,
-            child: IgnorePointer(
-              ignoring: volumesExpanded,
-              child: ExcludeSemantics(
-                excluding: volumesExpanded,
-                child: momentsScroll,
-              ),
-            ),
-          ),
+          momentsScroll,
           AnimatedSlide(
             key: emergencyVolumesCurtainKey,
             offset: volumesExpanded ? Offset.zero : const Offset(0, 1),
@@ -279,9 +280,12 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
               ignoring: !volumesExpanded,
               child: ExcludeSemantics(
                 excluding: !volumesExpanded,
-                child: Padding(
-                  padding: EdgeInsets.only(top: compact ? 4 : 12),
-                  child: _buildVolumes(compact: compact),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: compact ? 4 : 12),
+                    child: _buildVolumes(compact: compact),
+                  ),
                 ),
               ),
             ),
@@ -327,12 +331,10 @@ class _LiveDashboardPageState extends State<LiveDashboardPage>
         return PlaybackControls(
           playback: state.playback,
           narrationAvailable: state.narrationAvailable,
-          volumesExpanded: state.controlsExpanded,
           onPause: widget.controller.pause,
           onResume: widget.controller.resume,
           onStop: _confirmStop,
           onNarrationChanged: widget.controller.setNarration,
-          onVolumesToggle: widget.controller.toggleControlsExpanded,
           compact: compact,
         );
       },

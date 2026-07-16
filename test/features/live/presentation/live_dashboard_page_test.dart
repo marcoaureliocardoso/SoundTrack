@@ -49,7 +49,7 @@ void main() {
   ) async {
     final harness = await _pumpDashboard(tester);
 
-    expect(find.text('MOMENTOS — TOQUE PARA INICIAR'), findsOneWidget);
+    expect(find.text('MOMENTOS'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('Entrada'), findsOneWidget);
     expect(find.text('entrada.mp3'), findsOneWidget);
@@ -63,13 +63,13 @@ void main() {
     await tester.pump();
     expect(harness.playback.commands, ['start:ready']);
 
-    final pending = tester.widget<FilledButton>(
+    final pending = tester.widget<InkWell>(
       find.descendant(
         of: find.byKey(liveMomentKey('pending')),
-        matching: find.byType(FilledButton),
+        matching: find.byType(InkWell),
       ),
     );
-    expect(pending.onPressed, isNull);
+    expect(pending.onTap, isNull);
 
     harness.playback.snapshotNotifier.value = const PlaybackSnapshot.idle()
         .copyWith(
@@ -81,15 +81,14 @@ void main() {
         );
     await tester.pump();
     expect(find.text('ATUAL'), findsOneWidget);
-    expect(find.text('Reproduzindo'), findsOneWidget);
-    expect(find.text('0:12 / 3:00'), findsOneWidget);
-    final active = tester.widget<FilledButton>(
+    expect(find.text('Reproduzindo · 0:12 / 3:00'), findsOneWidget);
+    final active = tester.widget<InkWell>(
       find.descendant(
         of: find.byKey(liveMomentKey('ready')),
-        matching: find.byType(FilledButton),
+        matching: find.byType(InkWell),
       ),
     );
-    expect(active.onPressed, isNull);
+    expect(active.onTap, isNull);
 
     await harness.dispose(tester);
   });
@@ -112,17 +111,7 @@ void main() {
     await tester.tap(find.byKey(pausePlaybackKey));
     await tester.pump();
     expect(harness.playback.pauseCalls, 1);
-    expect(
-      tester
-          .widget<IconButton>(
-            find.descendant(
-              of: find.byKey(pausePlaybackKey),
-              matching: find.byType(IconButton),
-            ),
-          )
-          .onPressed,
-      isNull,
-    );
+    expect(tester.widget<InkWell>(find.byKey(pausePlaybackKey)).onTap, isNull);
     releasePause.complete();
     await tester.pump();
 
@@ -168,8 +157,8 @@ void main() {
     await _scrollToEmergencyVolumes(tester);
     expect(find.byType(Slider), findsNWidgets(3));
     expect(find.textContaining('Master'), findsOneWidget);
-    expect(find.textContaining('Música'), findsOneWidget);
-    expect(find.textContaining('Narração'), findsWidgets);
+    expect(find.text('Música — 100%'), findsOneWidget);
+    expect(find.text('Música durante a narração — 25%'), findsOneWidget);
 
     final releaseFirstVolumes = Completer<void>();
     var volumeCalls = 0;
@@ -239,14 +228,9 @@ void main() {
         .copyWith(activeMomentId: 'ready');
     await tester.pump();
 
-    final stop = tester.widget<IconButton>(
-      find.descendant(
-        of: find.byKey(stopPlaybackKey),
-        matching: find.byType(IconButton),
-      ),
-    );
-    stop.onPressed!();
-    stop.onPressed!();
+    final stop = tester.widget<InkWell>(find.byKey(stopPlaybackKey));
+    stop.onTap!();
+    stop.onTap!();
     await tester.pumpAndSettle();
     expect(find.text('Parar “Entrada”?'), findsOneWidget);
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -277,7 +261,7 @@ void main() {
 
     expect(find.text('Master — 80%'), findsOneWidget);
     expect(find.text('Música — 100%'), findsOneWidget);
-    expect(find.text('Narração — 25%'), findsOneWidget);
+    expect(find.text('Música durante a narração — 25%'), findsOneWidget);
     expect(find.text('Não foi possível ajustar os volumes.'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -333,14 +317,11 @@ void main() {
 
     await tester.tap(find.byKey(volumesToggleKey));
     await tester.pumpAndSettle();
-    final stopAfterLayoutChange = tester.widget<IconButton>(
-      find.descendant(
-        of: find.byKey(stopPlaybackKey),
-        matching: find.byType(IconButton),
-      ),
+    final stopAfterLayoutChange = tester.widget<InkWell>(
+      find.byKey(stopPlaybackKey),
     );
-    final stopWasReenabled = stopAfterLayoutChange.onPressed != null;
-    stopAfterLayoutChange.onPressed?.call();
+    final stopWasReenabled = stopAfterLayoutChange.onTap != null;
+    stopAfterLayoutChange.onTap?.call();
     await tester.pumpAndSettle();
     if (find
         .widgetWithText(FilledButton, 'Parar reprodução')
@@ -395,7 +376,7 @@ void main() {
       await tester.pump();
       expect(find.text('Master — 80%'), findsOneWidget);
       expect(find.text('Música — 100%'), findsOneWidget);
-      expect(find.text('Narração — 25%'), findsOneWidget);
+      expect(find.text('Música durante a narração — 25%'), findsOneWidget);
 
       await harness.dispose(tester);
     },
@@ -540,22 +521,22 @@ void main() {
         ),
       ),
     );
-    final first = tester.widget<FilledButton>(
+    final first = tester.widget<InkWell>(
       find.descendant(
         of: find.byKey(liveMomentKey('moment-0')),
-        matching: find.byType(FilledButton),
+        matching: find.byType(InkWell),
       ),
     );
-    final second = tester.widget<FilledButton>(
+    final second = tester.widget<InkWell>(
       find.descendant(
         of: find.byKey(liveMomentKey('moment-1')),
-        matching: find.byType(FilledButton),
+        matching: find.byType(InkWell),
       ),
     );
 
-    first.onPressed!();
-    first.onPressed!();
-    second.onPressed!();
+    first.onTap!();
+    first.onTap!();
+    second.onTap!();
     await tester.pump();
 
     expect(playback.requests.map((request) => request.momentId), [
@@ -564,24 +545,24 @@ void main() {
     ]);
     expect(
       tester
-          .widget<FilledButton>(
+          .widget<InkWell>(
             find.descendant(
               of: find.byKey(liveMomentKey('moment-0')),
-              matching: find.byType(FilledButton),
+              matching: find.byType(InkWell),
             ),
           )
-          .onPressed,
+          .onTap,
       isNull,
     );
     expect(
       tester
-          .widget<FilledButton>(
+          .widget<InkWell>(
             find.descendant(
               of: find.byKey(liveMomentKey('moment-1')),
-              matching: find.byType(FilledButton),
+              matching: find.byType(InkWell),
             ),
           )
-          .onPressed,
+          .onTap,
       isNull,
     );
 
